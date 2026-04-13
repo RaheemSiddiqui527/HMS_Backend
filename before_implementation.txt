@@ -1,0 +1,252 @@
+# Plan: Production-Grade HMS Backend (Admin & Doctor Panel)
+
+**TL;DR**: Build a complete, role-based backend system supporting 4 user types with separate MongoDB collections, JWT authentication, appointment management, prescriptions, notifications, and comprehensive validation. Implement using ES6 modules with default exports in controllers. Architecture spans 6 phases: (1) Core setup & base auth, (2) User models & role management, (3) Appointment system, (4) Prescription & medical records, (5) Notifications & messaging, (6) Admin dashboards & reports.
+
+---
+
+## **Steps**
+
+### **Phase 1: Project Structure & Core Setup** *(Parallel with Phase 2 discovery)*
+
+1. **Update package.json** with additional dependencies:
+   - `joi` for validation
+   - `express-cors` for frontend integration
+   - `multer` for file uploads (medical documents)
+
+2. **Create project folder structure**:
+   - `/models` — User, Patient, Doctor, Admin, Staff, Appointment, Prescription, Notification, MedicalRecord
+   - `/controllers` — auth.controller, user.controller, doctor.controller, patient.controller, admin.controller, appointment.controller, prescription.controller, notification.controller, report.controller
+   - `/routes` — auth.route, user.route, doctor.route, patient.route, admin.route, appointment.route, prescription.route, notification.route, report.route
+   - `/middlewares` — auth.middleware, validation.middleware, errorHandler.middleware, roleCheck.middleware
+   - `/utils` — validators.js, errors.js, response.js
+
+3. **Create utility files**:
+   - `errors.js` — Custom error classes (ValidationError, AuthError, NotFoundError)
+   - `response.js` — Standardized response formatter
+   - `validators.js` — Reusable validation schemas
+   - Extend `token.js` for token verification and refresh
+
+4. **Update middleware**:
+   - Enhance `auth.middleware.js` with role-based access control
+   - Create error handler middleware
+   - Add validation middleware
+
+5. **Update server.js**:
+   - Add CORS for frontend (http://localhost:3000 or equivalent)
+   - Add global error handler
+   - Add request/response logging middleware
+   - Mount all routes with versioning (/api/v1/...)
+
+### **Phase 2: Authentication & User Models** *(depends on Phase 1 complete)*
+
+6. **Create User model** (base schema with discriminator):
+   - Fields: email, password (hashed), role (enum: patient|doctor|admin|staff), firstName, lastName, phoneNumber, avatar, status (active|inactive|pending), createdAt, updatedAt
+   - Indexes on email (unique), role, status
+   - Pre-save hook to validate role exists in specific collection
+
+7. **Create specialized user models**:
+   - **Patient**: Extends User + medicalHistory, bloodType, weight, allergies, emergencyContact
+   - **Doctor**: Extends User + specialization, qualifications, licenseNumber, yearsOfExperience, bio, availableSlots
+   - **Admin**: Extends User + permissions, department
+   - **Staff**: Extends User + designation, department, shift
+
+8. **Refactor auth.controller.js** to support:
+   - `register()` — role-based registration (patient self-register OR admin-only for doctor/staff/admin)
+   - `login()` — returns jwt token + user profile (no password)
+   - `logout()` — invalidate token (store in blacklist or Redis)
+   - `refreshToken()` — issue new token using refresh logic
+   - `verifyToken()` — helper function
+   - Default export format: `export default { register, login, logout, refreshToken, verifyToken }`
+
+9. **Create user.controller.js** with:
+   - `getProfile()` — fetch current user
+   - `updateProfile()` — update user info (email, name, phone)
+   - `changePassword()` — update password with validation
+   - `deleteAccount()` — soft delete user account
+   - Default export with all functions
+
+10. **Create admin.controller.js** for admin-specific user management:
+    - `getAllUsers()` — list all users with filters (role, status)
+    - `getUserById()` — fetch specific user
+    - `createDoctor()` — admin creates doctor
+    - `createStaff()` — admin creates staff
+    - `updateUserStatus()` — activate/deactivate user
+    - `deleteUser()` — remove user record
+    - Default export with all functions
+
+### **Phase 3: Appointment Management** *(depends on Phase 2)*
+
+11. **Create Appointment model**:
+    - Fields: appointmentId (auto-generated), patientId (ref), doctorId (ref), date, timeSlot, reason, status (pending|confirmed|completed|cancelled), notes, createdAt, updatedAt
+    - Indexes on patientId, doctorId, status, date
+    - Validation: prevent double-booking (same doctor + slot), time slot must be future date
+
+12. **Create appointment.controller.js** with:
+    - `bookAppointment()` — patient books (validate slot availability, patient exists, doctor available)
+    - `getAppointments()` — list appointments (patient sees own, doctor sees assigned, admin sees all)
+    - `getAppointmentById()` — fetch single appointment details
+    - `updateAppointmentStatus()` — doctor confirms/rejects/completes
+    - `cancelAppointment()` — cancel with reason
+    - `checkAvailability()` — get available slots for doctor on date
+    - `generateSlots()` — helper to create available time slots
+    - Default export with all functions
+
+13. **Create appointment routes** with:
+    - POST `/appointments` — book (auth + patient role)
+    - GET `/appointments` — list (auth)
+    - GET `/appointments/:id` — details (auth)
+    - PATCH `/appointments/:id/status` — update (auth + doctor/admin)
+    - PATCH `/appointments/:id/cancel` — cancel (auth + patient/doctor)
+    - GET `/appointments/doctor/:doctorId/available` — check slots (public/auth)
+
+### **Phase 4: Prescriptions & Medical Records** *(depends on Phase 2 + 3)*
+
+14. **Create Prescription model**:
+    - Fields: prescriptionId (auto), doctorId (ref), patientId (ref), appointmentId (ref), medications (array: {name, dosage, duration, instructions}), notes, createdDate, validUntil
+    - Indexes on patientId, doctorId, createdDate
+
+15. **Create MedicalRecord model**:
+    - Fields: recordId (auto), patientId (ref), type (history|result|document), title, description, fileUrl, createdBy (doctor id), createdDate
+    - For storing medical history, test results, documents
+
+16. **Create prescription.controller.js** with:
+    - `createPrescription()` — doctor creates for patient (validate patient exists)
+    - `getPrescriptions()` — list patient's prescriptions (patient role) OR doctor's created (doctor role) OR all (admin)
+    - `getPrescriptionById()` — fetch details
+    - `updatePrescription()` — edit (doctor only, if not expired)
+    - `deletePrescription()` — delete draft prescription
+    - `getPrescriptionHistory()` — patient prescription history
+    - Default export with all functions
+
+17. **Create medicalRecord.controller.js** with:
+    - `addMedicalRecord()` — doctor adds patient record
+    - `getMedicalRecords()` — retrieve patient records (patient/assigned doctor/admin)
+    - `updateRecord()` — edit record
+    - `deleteRecord()` — remove record
+    - Default export with all functions
+
+### **Phase 5: Notifications & Messaging** *(depends on Phase 2)*
+
+18. **Create Notification model**:
+    - Fields: notificationId (auto), recipientId (ref), senderType (doctor|admin|system), title, message, type (normal|urgent|reminder), isRead, readAt, createdAt, expiresAt
+    - Indexes on recipientId, isRead, createdAt
+
+19. **Create NotificationTemplate model**:
+    - Fields: templateId (auto), name, content, createdBy (doctor/admin id), isActive
+
+20. **Create notification.controller.js** with:
+    - `sendNotification()` — doctor/admin sends to patient/doctor
+    - `getNotifications()` — list user's notifications (pagination)
+    - `markAsRead()` — mark single notification read
+    - `markAllAsRead()` — mark all as read
+    - `deleteNotification()` — delete single
+    - `createTemplate()` — save notification template
+    - `getTemplates()` — list templates (user's own)
+    - `getTemplateById()` — fetch single template
+    - Default export with all functions
+
+21. **Create notification routes** with endpoints for all above functions
+
+### **Phase 6: Admin Dashboard, Reports & Analytics** *(depends on Phases 2-5)*
+
+22. **Create report.controller.js** with:
+    - `getDashboardStats()` — return counts: total patients, doctors, appointments, revenue (admin)
+    - `getRecentActivity()` — list recent appointments, registrations, actions
+    - `getAppointmentMetrics()` — completed/pending/cancelled stats
+    - `getDoctorMetrics()` — patients per doctor, busy doctors
+    - `getPatientMetrics()` — demographics, registration trends
+    - `generateReport()` — PDF/JSON export of aggregated data
+    - Default export with all functions
+
+23. **Create reporting routes** with GET endpoints
+
+---
+
+## **Relevant Files** to Create/Modify
+
+**New Files to Create**:
+- `/models/Patient.js`
+- `/models/Doctor.js`
+- `/models/Admin.js`
+- `/models/Staff.js`
+- `/models/Appointment.js`
+- `/models/Prescription.js`
+- `/models/MedicalRecord.js`
+- `/models/Notification.js`
+- `/models/NotificationTemplate.js`
+- `/controllers/admin.controller.js`
+- `/controllers/patient.controller.js`
+- `/controllers/doctor.controller.js`
+- `/controllers/appointment.controller.js`
+- `/controllers/prescription.controller.js`
+- `/controllers/medicalRecord.controller.js`
+- `/controllers/notification.controller.js`
+- `/controllers/report.controller.js`
+- `/routes/admin.route.js`
+- `/routes/patient.route.js`
+- `/routes/doctor.route.js`
+- `/routes/appointment.route.js`
+- `/routes/prescription.route.js`
+- `/routes/medicalRecord.route.js`
+- `/routes/notification.route.js`
+- `/routes/report.route.js`
+- `/middlewares/roleCheck.middleware.js`
+- `/middlewares/errorHandler.middleware.js`
+- `/utils/validators.js`
+- `/utils/errors.js`
+- `/utils/response.js`
+
+**Files to Modify**:
+- `auth.controller.js` — convert to default export format, add role-based logic
+- `auth.middleware.js` — add token verification, role extraction
+- `auth.model.js` — rename to User.js, expand with role field, discrimination logic
+- `server.js` — add CORS, error handler, additional routes
+- `token.js` — add verify and refresh functions
+- `package.json` — add dependencies
+
+---
+
+## **Verification**
+
+### **Automated Tests** (Create simple test file):
+1. Test each controller function exists and exports correctly
+2. Test JWT token generation and verification
+3. Test appointment conflict detection
+4. Test role-based access on protected routes
+5. Database connection and model creation
+
+### **Manual Testing** (Using Postman/Insomnia):
+1. **Auth Flow**: Register patient → Login → Get token → Access protected route
+2. **Admin Flow**: Admin registers doctor → Doctor logs in → Creates prescription
+3. **Appointment Flow**: Patient books → Doctor accepts → Patient views
+4. **Notification Flow**: Doctor sends notification → Patient receives and marks read
+5. **Data Isolation**: Patient can only see own appointments/prescriptions, doctor can't see other doctor's patients
+6. **Dashboard**: Admin sees stats, only doctors see reports for their patients
+
+### **API Response Validation**:
+1. All responses use standardized format (success/error with metadata)
+2. Error responses include descriptive messages
+3. Timestamps and IDs are consistent
+4. Pagination works on list endpoints
+
+---
+
+## **Decisions & Assumptions**
+
+- **User Collections**: Separate collections (Patient, Doctor, Admin, Staff) with User base schema for clarity and role-specific fields
+- **Authentication**: JWT tokens in localStorage, 24-hour expiry, refresh endpoint for renewal
+- **Admin-Only Registrations**: Doctors and Staff created by Admin only; Patients can self-register (frontend will implement UI role switching for demo)
+- **Timestamps**: ISO 8601 format, MongoDB auto-manages _id and auto-increment via custom logic where needed
+- **Soft Deletes**: Users marked as `inactive` rather than hard-deleted for audit trail
+- **Error Handling**: Centralized middleware-based error handling with custom error classes
+- **Validation**: Server-side validation before database operations; Joi schemas for input validation
+
+---
+
+## **Further Considerations**
+
+1. **Real-Time Notifications**: Future enhancement could use Socket.io for real-time notification push instead of polling
+2. **File Uploads**: Medical documents (prescriptions, test results) could use AWS S3 or local file storage; currently schema supports fileUrl field
+3. **Email Notifications**: System could send emails on appointment confirmation, prescription generation, etc., using Nodemailer
+4. **Audit Logging**: Track admin actions (user creation, data modifications) in separate audit collection for compliance
+5. **Rate Limiting**: Add rate limiting middleware to prevent abuse on auth/notification endpoints
