@@ -46,8 +46,8 @@ const createPrescription = async (req, res, next) => {
     await prescription.save();
 
     const populatedPrescription = await Prescription.findById(prescription._id)
-      .populate("doctorId")
-      .populate("patientId");
+      .populate({ path: "doctorId", model: "doctor" })
+      .populate({ path: "patientId", model: "patient" });
 
     return sendSuccess(res, populatedPrescription, "Prescription created successfully", 201);
   } catch (error) {
@@ -73,8 +73,8 @@ const getPrescriptions = async (req, res, next) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const prescriptions = await Prescription.find(filter)
-      .populate("doctorId")
-      .populate("patientId")
+      .populate({ path: "doctorId", model: "doctor" })
+      .populate({ path: "patientId", model: "patient" })
       .limit(parseInt(limit))
       .skip(skip)
       .sort({ createdDate: -1 });

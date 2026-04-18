@@ -185,8 +185,8 @@ const getAppointments = async (req, res, next) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const appointments = await Appointment.find(filter)
-      .populate("patientId")
-      .populate("doctorId")
+      .populate({ path: "patientId", model: "patient" })
+      .populate({ path: "doctorId", model: "doctor" })
       .limit(parseInt(limit))
       .skip(skip)
       .sort({ date: -1 });
@@ -330,6 +330,24 @@ const getDoctorSchedule = async (req, res, next) => {
   }
 };
 
+// Get all unique patients who have appointments with a specific doctor
+const getMyPatients = async (req, res, next) => {
+  try {
+    const doctorId = req.user.id;
+    
+    // Find all unique patientIds from appointments for this doctor
+    const patientIds = await Appointment.distinct("patientId", { doctorId });
+    
+    // Fetch patient details
+    const patients = await Patient.find({ _id: { $in: patientIds } })
+      .select("firstName lastName email phoneNumber gender dateOfBirth");
+
+    return sendSuccess(res, patients, "Doctor's patients retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Export all functions as default
 export default {
   checkAvailability,
@@ -340,4 +358,5 @@ export default {
   cancelAppointment,
   getDoctorSchedule,
   generateSlots,
+  getMyPatients
 };

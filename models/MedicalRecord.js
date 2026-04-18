@@ -9,7 +9,7 @@ const medicalRecordSchema = new mongoose.Schema(
     recordId: {
       type: String,
       unique: true,
-      required: true,
+      required: false, // Auto-generated in pre-save hook
     },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -53,13 +53,12 @@ const medicalRecordSchema = new mongoose.Schema(
 );
 
 // Auto-generate recordId
-medicalRecordSchema.pre("save", async function (next) {
+medicalRecordSchema.pre("save", async function () {
   if (!this.recordId) {
-    const count = await MedicalRecord.countDocuments();
+    const count = await this.constructor.countDocuments();
     this.recordId = `MR-${Date.now()}-${count + 1}`;
   }
   this.lastModifiedDate = new Date();
-  next();
 });
 
 // Indexes for common queries

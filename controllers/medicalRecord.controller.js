@@ -39,8 +39,8 @@ const addMedicalRecord = async (req, res, next) => {
     await record.save();
 
     const populatedRecord = await MedicalRecord.findById(record._id)
-      .populate("patientId", "firstName lastName")
-      .populate("createdBy", "firstName lastName");
+      .populate({ path: "patientId", model: "patient", select: "firstName lastName" })
+      .populate({ path: "createdBy", model: "doctor", select: "firstName lastName" });
 
     return sendSuccess(res, populatedRecord, "Medical record added successfully", 201);
   } catch (error) {
@@ -71,8 +71,8 @@ const getMedicalRecords = async (req, res, next) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const records = await MedicalRecord.find(filter)
-      .populate("patientId", "firstName lastName email")
-      .populate("createdBy", "firstName lastName specialization")
+      .populate({ path: "patientId", model: "patient", select: "firstName lastName email" })
+      .populate({ path: "createdBy", model: "doctor", select: "firstName lastName specialization" })
       .limit(parseInt(limit))
       .skip(skip)
       .sort({ createdDate: -1 });

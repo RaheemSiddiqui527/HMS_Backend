@@ -14,6 +14,7 @@ router.get("/availability/check", appointmentController.checkAvailability);
 // Protected routes
 router.post("/book", protect, appointmentController.bookAppointment);
 router.get("/list", protect, appointmentController.getAppointments);
+router.get("/my-patients", protect, requireRole("doctor"), appointmentController.getMyPatients);
 router.get("/schedule", protect, appointmentController.getDoctorSchedule);
 router.get("/:appointmentId", protect, appointmentController.getAppointmentById);
 

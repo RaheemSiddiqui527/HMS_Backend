@@ -8,12 +8,13 @@ import { protect, requireRole } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// All admin routes require authentication and admin role
+// User management (Accessible by Admin and Doctor for search/referral)
+router.get("/users", protect, requireRole("admin", "doctor"), adminController.getAllUsers);
+router.get("/users/:userId", protect, requireRole("admin", "doctor"), adminController.getUserById);
+
+// All other admin routes require authentication and admin role strictly
 router.use(protect, requireRole("admin"));
 
-// User management
-router.get("/users", adminController.getAllUsers);
-router.get("/users/:userId", adminController.getUserById);
 router.patch("/users/:userId/status", adminController.updateUserStatus);
 router.delete("/users/:userId", adminController.deleteUser);
 

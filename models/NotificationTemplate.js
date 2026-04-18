@@ -37,12 +37,11 @@ const notificationTemplateSchema = new mongoose.Schema(
 );
 
 // Auto-generate templateId
-notificationTemplateSchema.pre("save", async function (next) {
+notificationTemplateSchema.pre("validate", async function () {
   if (!this.templateId) {
-    const count = await NotificationTemplate.countDocuments();
+    const count = await mongoose.models.NotificationTemplate.countDocuments();
     this.templateId = `TMPL-${Date.now()}-${count + 1}`;
   }
-  next();
 });
 
 // Indexes for common queries

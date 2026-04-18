@@ -9,7 +9,7 @@ const prescriptionSchema = new mongoose.Schema(
     prescriptionId: {
       type: String,
       unique: true,
-      required: true,
+      required: false, // Auto-generated in pre-save hook
     },
     doctorId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -66,12 +66,11 @@ const prescriptionSchema = new mongoose.Schema(
 );
 
 // Auto-generate prescriptionId
-prescriptionSchema.pre("save", async function (next) {
+prescriptionSchema.pre("save", async function () {
   if (!this.prescriptionId) {
-    const count = await Prescription.countDocuments();
+    const count = await this.constructor.countDocuments();
     this.prescriptionId = `RX-${Date.now()}-${count + 1}`;
   }
-  next();
 });
 
 // Indexes for common queries
