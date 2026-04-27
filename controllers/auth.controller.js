@@ -7,10 +7,12 @@ import Patient from "../models/Patient.js";
 import Doctor from "../models/Doctor.js";
 import Admin from "../models/Admin.js";
 import Staff from "../models/Staff.js";
+import Session from "../models/Session.js";
 import { generateAccessToken, verifyToken } from "../utils/token.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { validate, authSchemas } from "../utils/validators.js";
 import { ValidationError, AuthenticationError, NotFoundError, ConflictError } from "../utils/errors.js";
+import { parseUA } from "../utils/uaParser.js";
 
 // Register user based on role
 const register = async (req, res, next) => {
@@ -87,6 +89,16 @@ const register = async (req, res, next) => {
       role: newUser.role,
     });
 
+    // Create session
+    const deviceInfo = parseUA(req.headers["user-agent"]);
+    await Session.create({
+      userId: newUser._id,
+      token,
+      deviceInfo,
+      ipAddress: req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress,
+      status: "active",
+    });
+
     // Return response without password
     const userResponse = newUser.toJSON();
 
@@ -139,6 +151,16 @@ const login = async (req, res, next) => {
       role: user.role,
     });
 
+    // Create session
+    const deviceInfo = parseUA(req.headers["user-agent"]);
+    await Session.create({
+      userId: user._id,
+      token,
+      deviceInfo,
+      ipAddress: req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress,
+      status: "active",
+    });
+
     // Return response without password
     const userResponse = user.toJSON();
 
@@ -158,12 +180,73 @@ const login = async (req, res, next) => {
 // Logout user (mainly for client-side cleanup, token invalidation can be handled via blacklist/Redis)
 const logout = async (req, res, next) => {
   try {
-    // In a production app, you might want to:
-    // 1. Add token to blacklist in Redis/database
-    // 2. Remove refresh token from database
-    // 3. Invalidate all active sessions
+    const authHeader = req.headers.authorization;
+    const token = authHeader && (authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader);
+
+    if (token) {
+      // Mark session as revoked
+      await Session.findOneAndUpdate({ token }, { status: "revoked" });
+    }
 
     return sendSuccess(res, null, "Logout successful");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get all active sessions for current user
+const getSessions = async (req, res, next) => {
+  try {
+    const sessions = await Session.find({
+      userId: req.user.id,
+      status: "active",
+    }).sort({ lastActive: -1 });
+
+    return sendSuccess(res, sessions, "Sessions fetched successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Revoke a specific session
+const revokeSession = async (req, res, next) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await Session.findOne({
+      _id: sessionId,
+      userId: req.user.id,
+    });
+
+    if (!session) {
+      return sendError(res, "Session not found", 404);
+    }
+
+    session.status = "revoked";
+    await session.save();
+
+    return sendSuccess(res, null, "Session revoked successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Revoke all sessions except current
+const revokeAllOtherSessions = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const currentToken = authHeader && (authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader);
+
+    await Session.updateMany(
+      {
+        userId: req.user.id,
+        token: { $ne: currentToken },
+        status: "active",
+      },
+      { status: "revoked" }
+    );
+
+    return sendSuccess(res, null, "All other sessions revoked successfully");
   } catch (error) {
     next(error);
   }
@@ -233,4 +316,7 @@ export default {
   logout,
   verifyUserToken,
   refreshToken,
+  getSessions,
+  revokeSession,
+  revokeAllOtherSessions,
 };

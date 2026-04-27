@@ -11,6 +11,9 @@ const router = express.Router();
 // Public route - check availability
 router.get("/availability/check", appointmentController.checkAvailability);
 
+// Patient-accessible: get all doctors for booking
+router.get("/doctors", protect, appointmentController.getAvailableDoctors);
+
 // Protected routes
 router.post("/book", protect, appointmentController.bookAppointment);
 router.get("/list", protect, appointmentController.getAppointments);

@@ -109,6 +109,13 @@ export const notificationSchemas = {
     name: Joi.string().required(),
     content: Joi.string().required(),
   }),
+  
+  sendBroadcast: Joi.object({
+    title: Joi.string().required(),
+    message: Joi.string().required(),
+    type: Joi.string().valid("info", "warning", "error", "success", "broadcast"),
+    recipientRole: Joi.string().valid("patient", "doctor", "admin", "staff", "all", ""),
+  }),
 };
 
 export const validate = (schema, data) => {

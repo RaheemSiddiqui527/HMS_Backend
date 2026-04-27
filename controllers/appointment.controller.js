@@ -9,6 +9,27 @@ import { sendSuccess, sendError } from "../utils/response.js";
 import { validate, appointmentSchemas } from "../utils/validators.js";
 import { NotFoundError, ConflictError, ValidationError } from "../utils/errors.js";
 
+// Get all active doctors - accessible to patients for booking
+const getAvailableDoctors = async (req, res, next) => {
+  try {
+    const { specialization, search } = req.query;
+    const filter = { role: "doctor", status: "active" };
+    if (specialization) filter.specialization = specialization;
+    if (search) {
+      filter.$or = [
+        { firstName: { $regex: search, $options: "i" } },
+        { lastName: { $regex: search, $options: "i" } },
+      ];
+    }
+    const doctors = await Doctor.find(filter)
+      .select("firstName lastName specialization consultationFee rating yearsOfExperience bio availableSlots")
+      .sort({ rating: -1 });
+    return sendSuccess(res, doctors, "Doctors retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Generate available time slots for a doctor on a given date
 const generateSlots = (startTime, endTime, slotDuration) => {
   const slots = [];
@@ -160,7 +181,7 @@ const bookAppointment = async (req, res, next) => {
 // Get appointments with role-based filtering
 const getAppointments = async (req, res, next) => {
   try {
-    const { userId } = req.query;
+    const userId = req.query.userId || req.user.id;
     const { page = 1, limit = 10, status } = req.query;
 
     if (!userId) {
@@ -351,6 +372,7 @@ const getMyPatients = async (req, res, next) => {
 // Export all functions as default
 export default {
   checkAvailability,
+  getAvailableDoctors,
   bookAppointment,
   getAppointments,
   getAppointmentById,

@@ -4,6 +4,7 @@
 
 import express from "express";
 import adminController from "../controllers/admin.controller.js";
+import notificationController from "../controllers/notification.controller.js";
 import { protect, requireRole } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
@@ -11,6 +12,10 @@ const router = express.Router();
 // User management (Accessible by Admin and Doctor for search/referral)
 router.get("/users", protect, requireRole("admin", "doctor"), adminController.getAllUsers);
 router.get("/users/:userId", protect, requireRole("admin", "doctor"), adminController.getUserById);
+
+// Notifications (Accessible by Admin and Doctor)
+router.get("/notifications", protect, requireRole("admin", "doctor"), notificationController.getAllNotifications);
+router.post("/notifications/broadcast", protect, requireRole("admin", "doctor"), notificationController.sendBroadcast);
 
 // All other admin routes require authentication and admin role strictly
 router.use(protect, requireRole("admin"));

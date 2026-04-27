@@ -1,8 +1,9 @@
 import jwt from "jsonwebtoken";
 import { sendError } from "../utils/response.js";
 import { AuthenticationError } from "../utils/errors.js";
+import Session from "../models/Session.js";
 
-export const protect = (req, res, next) => {
+export const protect = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
@@ -13,10 +14,23 @@ export const protect = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if session exists and is active
+    const session = await Session.findOne({ token, status: "active" });
+    if (!session) {
+      return sendError(res, "Session has been revoked or expired", 401);
+    }
+
+    // Update last active
+    session.lastActive = new Date();
+    await session.save();
+
     req.user = decoded;
     next();
   } catch (error) {
     if (error.name === "TokenExpiredError") {
+      // Also mark session as revoked if expired? 
+      // Actually, better to just let it expire.
       return sendError(res, "Token has expired", 401);
     }
     return sendError(res, "Invalid or malformed token", 401);

@@ -52,7 +52,15 @@ const getNotifications = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, isRead } = req.query;
 
-    const filter = { recipientId: req.user.id };
+    const filter = {
+      $or: [
+        { recipientId: req.user.id },
+        { 
+          isBroadcast: true, 
+          recipientRole: { $in: ["all", req.user.role, null, ""] }
+        }
+      ]
+    };
 
     if (isRead !== undefined) {
       filter.isRead = isRead === "true";
@@ -68,7 +76,7 @@ const getNotifications = async (req, res, next) => {
 
     const total = await Notification.countDocuments(filter);
     const unreadCount = await Notification.countDocuments({
-      recipientId: req.user.id,
+      ...filter,
       isRead: false,
     });
 
@@ -257,6 +265,72 @@ const updateTemplate = async (req, res, next) => {
   }
 };
 
+// Get all notifications (Admin)
+const getAllNotifications = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, type, role } = req.query;
+
+    const filter = {};
+    if (type) filter.type = type;
+    if (role) filter.recipientRole = role;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const notifications = await Notification.find(filter)
+      .populate("recipientId")
+      .populate("senderId")
+      .limit(parseInt(limit))
+      .skip(skip)
+      .sort({ createdAt: -1 });
+
+    const total = await Notification.countDocuments(filter);
+
+    return sendSuccess(
+      res,
+      {
+        notifications,
+        pagination: {
+          total,
+          pages: Math.ceil(total / parseInt(limit)),
+          currentPage: parseInt(page),
+          limit: parseInt(limit),
+        },
+      },
+      "All notifications retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Send broadcast notification
+const sendBroadcast = async (req, res, next) => {
+  try {
+    const { title, message, type = "broadcast", recipientRole = "all" } = req.body;
+
+    // Validate input
+    const { error } = validate(notificationSchemas.sendBroadcast, req.body);
+    if (error) {
+      return sendError(res, "Validation failed", 400, error);
+    }
+
+    const notification = new Notification({
+      senderId: req.user.id,
+      title,
+      message,
+      type,
+      recipientRole: recipientRole || "all",
+      isBroadcast: true,
+    });
+
+    await notification.save();
+
+    return sendSuccess(res, notification, "Broadcast sent successfully", 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Delete template
 const deleteTemplate = async (req, res, next) => {
   try {
@@ -286,4 +360,6 @@ export default {
   getTemplateById,
   updateTemplate,
   deleteTemplate,
+  getAllNotifications,
+  sendBroadcast,
 };

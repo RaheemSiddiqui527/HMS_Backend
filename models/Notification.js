@@ -9,17 +9,25 @@ const notificationSchema = new mongoose.Schema(
     notificationId: {
       type: String,
       unique: true,
-      required: true,
     },
     recipientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: [true, "Recipient is required"],
+      default: null, // null for broadcasts
     },
     senderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null, // null for system notifications
+    },
+    recipientRole: {
+      type: String,
+      enum: ["all", "patient", "doctor", "admin", "staff", null],
+      default: null,
+    },
+    isBroadcast: {
+      type: Boolean,
+      default: false,
     },
     title: {
       type: String,
@@ -31,7 +39,7 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["normal", "urgent", "reminder", "appointment", "prescription"],
+      enum: ["normal", "urgent", "reminder", "appointment", "prescription", "broadcast"],
       default: "normal",
     },
     relatedEntity: {
@@ -61,12 +69,11 @@ const notificationSchema = new mongoose.Schema(
 );
 
 // Auto-generate notificationId
-notificationSchema.pre("save", async function (next) {
+notificationSchema.pre("save", async function () {
   if (!this.notificationId) {
-    const count = await Notification.countDocuments();
+    const count = await this.constructor.countDocuments();
     this.notificationId = `NOT-${Date.now()}-${count + 1}`;
   }
-  next();
 });
 
 // Indexes for common queries

@@ -13,4 +13,9 @@ router.post("/logout", protect, authController.logout);
 router.post("/verify-token", protect, authController.verifyUserToken);
 router.post("/refresh-token", protect, authController.refreshToken);
 
+// Session management routes
+router.get("/sessions", protect, authController.getSessions);
+router.delete("/sessions/:sessionId", protect, authController.revokeSession);
+router.delete("/sessions", protect, authController.revokeAllOtherSessions);
+
 export default router;

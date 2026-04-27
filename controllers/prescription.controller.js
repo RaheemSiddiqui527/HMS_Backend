@@ -46,8 +46,15 @@ const createPrescription = async (req, res, next) => {
     await prescription.save();
 
     const populatedPrescription = await Prescription.findById(prescription._id)
-      .populate({ path: "doctorId", model: "doctor" })
-      .populate({ path: "patientId", model: "patient" });
+      .populate({ path: "doctorId", model: "Doctor" })
+      .populate({ path: "patientId", model: "Patient" });
+
+    // Send automatic email notification
+    if (populatedPrescription.patientId && populatedPrescription.patientId.email) {
+      import("../utils/email.js").then((emailUtil) => {
+        emailUtil.sendPrescriptionEmail(populatedPrescription);
+      });
+    }
 
     return sendSuccess(res, populatedPrescription, "Prescription created successfully", 201);
   } catch (error) {
