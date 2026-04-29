@@ -102,7 +102,7 @@ export const notificationSchemas = {
     recipientId: Joi.string().required(),
     title: Joi.string().required(),
     message: Joi.string().required(),
-    type: Joi.string().valid("normal", "urgent", "reminder"),
+    type: Joi.string().valid("normal", "urgent", "reminder", "appointment", "prescription", "medical", "broadcast"),
   }),
 
   createTemplate: Joi.object({

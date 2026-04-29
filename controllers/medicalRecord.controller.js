@@ -51,8 +51,12 @@ const addMedicalRecord = async (req, res, next) => {
 // Get medical records for a patient
 const getMedicalRecords = async (req, res, next) => {
   try {
-    const { patientId } = req.query;
+    let { patientId } = req.query;
     const { page = 1, limit = 10, type } = req.query;
+
+    if (req.user.role === "patient") {
+      patientId = req.user.id;
+    }
 
     if (!patientId) {
       return sendError(res, "Patient ID is required", 400);

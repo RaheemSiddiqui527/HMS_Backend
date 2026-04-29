@@ -49,6 +49,7 @@ const prescriptionSchema = new mongoose.Schema(
     ],
     diagnosis: String,
     notes: String,
+    signature: String, // Store base64 e-signature
     createdDate: {
       type: Date,
       default: Date.now,

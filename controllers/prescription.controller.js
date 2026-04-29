@@ -12,7 +12,7 @@ import { NotFoundError } from "../utils/errors.js";
 // Create prescription
 const createPrescription = async (req, res, next) => {
   try {
-    const { patientId, appointmentId, medications, diagnosis, notes, validUntil } = req.body;
+    const { patientId, appointmentId, medications, diagnosis, notes, signature, validUntil } = req.body;
 
     // Validate input
     const { error, value } = validate(prescriptionSchemas.create, req.body);
@@ -39,6 +39,7 @@ const createPrescription = async (req, res, next) => {
       medications,
       diagnosis,
       notes,
+      signature,
       validUntil,
       isActive: true,
     });

@@ -39,7 +39,7 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["normal", "urgent", "reminder", "appointment", "prescription", "broadcast"],
+      enum: ["normal", "urgent", "reminder", "appointment", "prescription", "broadcast", "medical"],
       default: "normal",
     },
     relatedEntity: {
