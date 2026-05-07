@@ -38,6 +38,23 @@ export const authSchemas = {
     }),
   }),
 
+  socialLogin: Joi.object({
+    email: Joi.string().email().required().messages({
+      "string.email": "Invalid email format",
+      "any.required": "Email is required",
+    }),
+    firstName: Joi.string().allow("").default("Social"),
+    lastName: Joi.string().allow("").default("User"),
+    provider: Joi.string().valid("google", "facebook", "apple", "twitter").required().messages({
+      "any.only": "Invalid provider",
+      "any.required": "Provider is required",
+    }),
+    providerId: Joi.string().required().messages({
+      "any.required": "Provider ID is required",
+    }),
+    role: Joi.string().valid("patient", "doctor", "admin", "staff").default("patient"),
+  }),
+
   updateProfile: Joi.object({
     firstName: Joi.string(),
     lastName: Joi.string(),

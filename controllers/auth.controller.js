@@ -177,6 +177,100 @@ const login = async (req, res, next) => {
   }
 };
 
+// Social Login (Google, Facebook, etc.)
+const socialLogin = async (req, res, next) => {
+  try {
+    const { email, firstName, lastName, provider, providerId, role = "patient" } = req.body;
+
+    // Validate input
+    const { error } = validate(authSchemas.socialLogin, req.body);
+    if (error) {
+      return sendError(res, "Validation failed", 400, error);
+    }
+
+    // Find user by email OR providerId
+    let user = await User.findOne({ 
+      $or: [
+        { email },
+        { providerId, authProvider: provider }
+      ]
+    });
+
+    if (user) {
+      // If user exists but wasn't linked to this provider, link it
+      if (!user.providerId) {
+        user.providerId = providerId;
+        user.authProvider = provider;
+        await user.save();
+      }
+    } else {
+      // Create new user for social login
+      const userData = {
+        email,
+        firstName: firstName || "Social",
+        lastName: lastName || "User",
+        role,
+        authProvider: provider,
+        providerId,
+        status: "active",
+      };
+
+      switch (role) {
+        case "patient":
+          user = new Patient(userData);
+          break;
+        case "doctor":
+          user = new Doctor({ ...userData, isVerified: false });
+          break;
+        case "admin":
+          user = new Admin(userData);
+          break;
+        case "staff":
+          user = new Staff(userData);
+          break;
+        default:
+          user = new Patient(userData);
+      }
+      await user.save();
+    }
+
+    // Check user status
+    if (user.status === "inactive") {
+      return sendError(res, "Your account has been deactivated", 403);
+    }
+
+    // Generate token
+    const token = generateAccessToken({
+      id: user._id,
+      email: user.email,
+      role: user.role,
+    });
+
+    // Create session
+    const deviceInfo = parseUA(req.headers["user-agent"]);
+    await Session.create({
+      userId: user._id,
+      token,
+      deviceInfo,
+      ipAddress: req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress,
+      status: "active",
+    });
+
+    const userResponse = user.toJSON();
+
+    return sendSuccess(
+      res,
+      {
+        user: userResponse,
+        token,
+      },
+      "Social login successful"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Logout user (mainly for client-side cleanup, token invalidation can be handled via blacklist/Redis)
 const logout = async (req, res, next) => {
   try {
@@ -313,6 +407,7 @@ const refreshToken = async (req, res, next) => {
 export default {
   register,
   login,
+  socialLogin,
   logout,
   verifyUserToken,
   refreshToken,
