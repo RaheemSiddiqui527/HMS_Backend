@@ -13,12 +13,12 @@ const prescriptionSchema = new mongoose.Schema(
     },
     doctorId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Doctor",
+      ref: "doctor",
       required: [true, "Doctor is required"],
     },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Patient",
+      ref: "patient",
       required: [true, "Patient is required"],
     },
     appointmentId: {

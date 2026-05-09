@@ -13,7 +13,7 @@ const medicalRecordSchema = new mongoose.Schema(
     },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Patient",
+      ref: "patient",
       required: [true, "Patient is required"],
     },
     type: {
@@ -33,7 +33,7 @@ const medicalRecordSchema = new mongoose.Schema(
     normalRange: String, // For lab results
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Doctor",
+      ref: "doctor",
       required: [true, "Created by doctor is required"],
     },
     createdDate: {

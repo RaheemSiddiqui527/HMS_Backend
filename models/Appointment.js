@@ -9,17 +9,16 @@ const appointmentSchema = new mongoose.Schema(
     appointmentId: {
       type: String,
       unique: true,
-      required: true,
     },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Patient",
-      required: [true, "Patient is required"],
+      ref: "patient",
+      required: true,
     },
     doctorId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Doctor",
-      required: [true, "Doctor is required"],
+      ref: "doctor",
+      required: true,
     },
     date: {
       type: Date,
@@ -59,21 +58,20 @@ const appointmentSchema = new mongoose.Schema(
 );
 
 // Auto-generate appointmentId
-appointmentSchema.pre("save", async function (next) {
+appointmentSchema.pre("save", async function () {
   if (!this.appointmentId) {
-    const count = await Appointment.countDocuments();
+    // Use this.constructor to refer to the model safely
+    const count = await this.constructor.countDocuments();
     this.appointmentId = `APT-${Date.now()}-${count + 1}`;
   }
   this.updatedAt = new Date();
-  next();
 });
 
 // Indexes for common queries
 appointmentSchema.index({ patientId: 1 });
-appointmentSchema.index({ doctorId: 1 });
 appointmentSchema.index({ date: 1 });
 appointmentSchema.index({ status: 1 });
-appointmentSchema.index({ doctorId: 1, date: 1 }); // For checking availability
+appointmentSchema.index({ doctorId: 1, date: 1 }); // Compound index covers individual doctorId queries too
 
 const Appointment = mongoose.model("Appointment", appointmentSchema);
 

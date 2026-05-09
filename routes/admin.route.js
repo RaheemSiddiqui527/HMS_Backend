@@ -9,9 +9,9 @@ import { protect, requireRole } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// User management (Accessible by Admin and Doctor for search/referral)
-router.get("/users", protect, requireRole("admin", "doctor"), adminController.getAllUsers);
-router.get("/users/:userId", protect, requireRole("admin", "doctor"), adminController.getUserById);
+// User management (Accessible by Admin, Doctor, and Staff)
+router.get("/users", protect, requireRole("admin", "doctor", "staff"), adminController.getAllUsers);
+router.get("/users/:userId", protect, requireRole("admin", "doctor", "staff"), adminController.getUserById);
 
 // Notifications (Accessible by Admin and Doctor)
 router.get("/notifications", protect, requireRole("admin", "doctor"), notificationController.getAllNotifications);

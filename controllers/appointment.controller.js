@@ -150,6 +150,22 @@ const bookAppointment = async (req, res, next) => {
       return sendError(res, "This time slot is already booked", 409);
     }
 
+    // Check if patient already has an appointment today
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const patientAppointmentToday = await Appointment.findOne({
+      patientId,
+      date: { $gte: startOfDay, $lte: endOfDay },
+      status: { $ne: "cancelled" }
+    });
+
+    if (patientAppointmentToday) {
+      return sendError(res, "Patient already has an appointment today", 400);
+    }
+
     // Check if appointment is in the future
     const appointmentDateTime = new Date(`${date} ${timeSlot.split(" - ")[0]}`);
     if (appointmentDateTime <= new Date()) {
@@ -195,7 +211,7 @@ const getAppointments = async (req, res, next) => {
       filter.patientId = userId;
     } else if (req.user.role === "doctor") {
       filter.doctorId = userId;
-    } else if (req.user.role !== "admin") {
+    } else if (req.user.role !== "admin" && req.user.role !== "staff") {
       return sendError(res, "Unauthorized", 403);
     }
 
