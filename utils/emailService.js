@@ -22,6 +22,13 @@ const transporter = nodemailer.createTransport({
     pass: process.env.SMTP_PASS || "",
   },
   tls: { rejectUnauthorized: false },
+  // Force IPv4 — Render's free tier lacks IPv6 outbound routes.
+  // Without this, Node DNS may resolve smtp.gmail.com to an IPv6 address
+  // causing ENETUNREACH (2607:f8b0:...:587).
+  family: 4,
+  connectionTimeout: 10000, // 10 s — fail fast instead of hanging
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
 });
 
 transporter.verify((error) => {
