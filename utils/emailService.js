@@ -835,7 +835,7 @@ export const sendLoginAlertEmail = async (user, deviceInfo, ipAddress) => {
 
     ${alertBox("⚠️ If you did <strong>NOT</strong> perform this login, please contact support immediately and change your password.", "warning")}
 
-    ${ctaButton("Manage Account Security →", `${BRAND.portalUrl}/settings/security`, "#d97706")}
+    ${ctaButton("Manage Account Security →", `${BRAND.portalUrl}/patient/profile`, "#d97706")}
   `, "If this login was not performed by you, contact our support team immediately.");
 
   return sendEmail({ to: email, subject: "🔒 New Login Detected — SDI Health Care", html, type: "login_alert", userId: _id });
