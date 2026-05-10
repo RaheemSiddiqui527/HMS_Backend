@@ -5,8 +5,12 @@
  */
 
 import nodemailer from "nodemailer";
+import dns from "dns";
 import dotenv from "dotenv";
 import EmailLog from "../models/EmailLog.js";
+
+// Force IPv4-first globally (belt-and-suspenders alongside server.js)
+dns.setDefaultResultOrder("ipv4first");
 
 dotenv.config();
 
@@ -22,11 +26,13 @@ const transporter = nodemailer.createTransport({
     pass: process.env.SMTP_PASS || "",
   },
   tls: { rejectUnauthorized: false },
-  // Force IPv4 — Render's free tier lacks IPv6 outbound routes.
-  // Without this, Node DNS may resolve smtp.gmail.com to an IPv6 address
-  // causing ENETUNREACH (2607:f8b0:...:587).
-  family: 4,
-  connectionTimeout: 10000, // 10 s — fail fast instead of hanging
+  // Explicitly force IPv4 DNS lookup — Render's free tier has no IPv6 outbound.
+  // nodemailer's `family` option is NOT forwarded to net.connect; this custom
+  // lookup is the only reliable way to pin resolution to IPv4.
+  lookup: (hostname, options, callback) => {
+    dns.lookup(hostname, { ...options, family: 4 }, callback);
+  },
+  connectionTimeout: 10000,
   greetingTimeout: 10000,
   socketTimeout: 15000,
 });

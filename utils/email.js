@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import dns from "dns";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -15,8 +16,10 @@ const transporter = nodemailer.createTransport({
     pass: process.env.SMTP_PASS || "",
   },
   tls: { rejectUnauthorized: false },
-  // Force IPv4 — Render's free tier lacks IPv6 outbound routes.
-  family: 4,
+  // Force IPv4 resolution explicitly via custom lookup
+  lookup: (hostname, options, callback) => {
+    dns.lookup(hostname, { ...options, family: 4 }, callback);
+  },
   connectionTimeout: 10000,
   greetingTimeout: 10000,
   socketTimeout: 15000,

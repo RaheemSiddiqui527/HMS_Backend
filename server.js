@@ -1,3 +1,9 @@
+// Force IPv4-first DNS resolution — must be the very first import.
+// Render's free tier has no IPv6 outbound routes; without this, Node resolves
+// smtp.gmail.com to an IPv6 address (2607:f8b0:...) and fails with ENETUNREACH.
+import dns from "dns";
+dns.setDefaultResultOrder("ipv4first");
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
