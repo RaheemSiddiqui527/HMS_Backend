@@ -84,7 +84,6 @@ const doctorSchema = new mongoose.Schema(
 
 // Index for common queries
 doctorSchema.index({ specialization: 1 });
-doctorSchema.index({ licenseNumber: 1 });
 doctorSchema.index({ isVerified: 1 });
 
 const Doctor = User.discriminator("doctor", doctorSchema);
