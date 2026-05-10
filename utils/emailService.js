@@ -16,25 +16,19 @@ dotenv.config();
 
 let transporter;
 
-/**
- * Lazy initialization of transporter
- * Forces IPv4 and uses Port 465 (SSL) for maximum reliability on Render.
- */
+// Lazy initialization of transporter
 const getTransporter = () => {
   if (!transporter) {
-    const port = parseInt(process.env.SMTP_PORT) || 465;
-    const isSecure = port === 465;
-
     transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: port,
-      secure: isSecure,
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true, // Use SSL
       auth: {
-        user: process.env.SMTP_USER || process.env.EMAIL_USER || "",
-        pass: process.env.SMTP_PASS || process.env.EMAIL_PASS || "",
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
       },
       tls: { rejectUnauthorized: false },
-      // Explicitly force IPv4 DNS lookup — Render's free tier has no IPv6 outbound.
+      // Force IPv4 DNS lookup — Critical for Render to avoid ENETUNREACH
       lookup: (hostname, options, callback) => {
         dns.lookup(hostname, { ...options, family: 4 }, callback);
       },
@@ -46,9 +40,9 @@ const getTransporter = () => {
     // Verify connection configuration
     transporter.verify((error) => {
       if (error) {
-        console.error("❌ Email Service Error:", error.message);
+        console.log("❌ Email Service Error:", error);
       } else {
-        console.log(`✅ Email Service is ready — ${process.env.SMTP_USER || process.env.EMAIL_USER}`);
+        console.log("✅ Email Service is ready to send messages");
       }
     });
   }
@@ -911,6 +905,9 @@ export const sendIslamicNewYearEmail = async (user, { senderName = "SDI Health C
 // ─────────────────────────────────────────────
 // Exports
 // ─────────────────────────────────────────────
+// Trigger initial verification on startup (so success/error appears in console)
+getTransporter();
+
 export default {
   sendWelcomeEmail,
   sendAppointmentBookedEmail,

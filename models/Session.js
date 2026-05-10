@@ -35,7 +35,6 @@ const sessionSchema = new mongoose.Schema(
 
 // Index for performance
 sessionSchema.index({ userId: 1 });
-sessionSchema.index({ token: 1 });
 
 const Session = mongoose.model("Session", sessionSchema);
 
