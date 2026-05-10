@@ -6,30 +6,28 @@ dotenv.config();
 
 let transporter;
 
-/**
- * Lazy initialization of transporter
- * Enforces SSL (Port 465) and IPv4 for Render reliability.
- */
+// Lazy initialization of transporter
 const getTransporter = () => {
   if (!transporter) {
-    const port = parseInt(process.env.SMTP_PORT) || 465;
-    const isSecure = port === 465;
-
     transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: port,
-      secure: isSecure,
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false, // STARTTLS
+      requireTLS: true,
       auth: {
-        user: process.env.SMTP_USER || process.env.EMAIL_USER || "",
-        pass: process.env.SMTP_PASS || process.env.EMAIL_PASS || "",
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
       },
-      tls: { rejectUnauthorized: false },
+      tls: {
+        rejectUnauthorized: false,
+        minVersion: "TLSv1.2",
+      },
       lookup: (hostname, options, callback) => {
         dns.lookup(hostname, { ...options, family: 4 }, callback);
       },
-      connectionTimeout: 20000,
-      greetingTimeout: 20000,
-      socketTimeout: 30000,
+      connectionTimeout: 40000,
+      greetingTimeout: 40000,
+      socketTimeout: 60000,
     });
   }
   return transporter;
@@ -43,7 +41,7 @@ export const sendPrescriptionEmail = async (prescription) => {
   const { patientId, doctorId, medications, notes, createdDate, _id } = prescription;
   
   const mailOptions = {
-    from: `"SDI Health Care" <${process.env.SMTP_FROM || 'noreply@sdihealth.com'}>`,
+    from: `"SDI Health Care" <${process.env.SMTP_FROM || process.env.EMAIL_USER || 'noreply@sdihealth.com'}>`,
     to: patientId.email,
     subject: `Digital Prescription Issued: RX-${_id.slice(-8).toUpperCase()}`,
     html: `
@@ -111,7 +109,6 @@ export const sendPrescriptionEmail = async (prescription) => {
     return true;
   } catch (error) {
     console.error("Error sending prescription email:", error);
-    // Don't throw, just log. We don't want to fail the whole request if email fails.
     return false;
   }
 };

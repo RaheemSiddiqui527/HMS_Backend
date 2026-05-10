@@ -20,16 +20,27 @@ let transporter;
 const getTransporter = () => {
   if (!transporter) {
     transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false, // Port 587 uses STARTTLS
+      requireTLS: true,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
-      // Force IPv4 and high timeouts
-      connectionTimeout: 30000,
-      greetingTimeout: 30000,
-      socketTimeout: 45000,
-      dnsTimeout: 10000,
+      tls: {
+        rejectUnauthorized: false,
+        minVersion: "TLSv1.2",
+      },
+      // Force IPv4 — This is the only way to bypass Render's IPv6 connectivity issues.
+      lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { ...options, family: 4 }, callback);
+      },
+      connectionTimeout: 40000, // 40 seconds
+      greetingTimeout: 40000,
+      socketTimeout: 60000,
+      debug: true, // Enable debug logging
+      logger: true, // Enable built-in logger
     });
 
     // Verify connection configuration
