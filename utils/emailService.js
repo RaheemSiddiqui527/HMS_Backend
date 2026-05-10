@@ -19,28 +19,25 @@ let transporter;
 // Lazy initialization of transporter
 const getTransporter = () => {
   if (!transporter) {
+    console.log("DEBUG: Initializing SMTP with user:", process.env.EMAIL_USER?.slice(0, 4) + "...");
+    
     transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
-      port: 587,
-      secure: false, // Port 587 uses STARTTLS
-      requireTLS: true,
+      port: 465,
+      secure: true, // Use SSL for Port 465
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
       tls: {
         rejectUnauthorized: false,
-        minVersion: "TLSv1.2",
       },
-      // Force IPv4 — This is the only way to bypass Render's IPv6 connectivity issues.
+      // Force IPv4 — This is critical for Render
       lookup: (hostname, options, callback) => {
         dns.lookup(hostname, { ...options, family: 4 }, callback);
       },
-      connectionTimeout: 40000, // 40 seconds
-      greetingTimeout: 40000,
-      socketTimeout: 60000,
-      debug: true, // Enable debug logging
-      logger: true, // Enable built-in logger
+      connectionTimeout: 60000, // 60 seconds
+      greetingTimeout: 60000,
     });
 
     // Verify connection configuration

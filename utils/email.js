@@ -9,25 +9,24 @@ let transporter;
 // Lazy initialization of transporter
 const getTransporter = () => {
   if (!transporter) {
+    console.log("DEBUG: Initializing SMTP (Prescription) with user:", process.env.EMAIL_USER?.slice(0, 4) + "...");
+
     transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
-      port: 587,
-      secure: false, // STARTTLS
-      requireTLS: true,
+      port: 465,
+      secure: true,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
       tls: {
         rejectUnauthorized: false,
-        minVersion: "TLSv1.2",
       },
       lookup: (hostname, options, callback) => {
         dns.lookup(hostname, { ...options, family: 4 }, callback);
       },
-      connectionTimeout: 40000,
-      greetingTimeout: 40000,
-      socketTimeout: 60000,
+      connectionTimeout: 60000,
+      greetingTimeout: 60000,
     });
   }
   return transporter;
@@ -114,3 +113,4 @@ export const sendPrescriptionEmail = async (prescription) => {
 };
 
 export default { sendPrescriptionEmail };
+  
