@@ -1,45 +1,22 @@
 /**
  * Email Service — SDI Health Care
  * Professional HTML email templates with SDI brand identity.
+ * Uses Resend API (HTTP) — works on Render, Vercel, Railway, etc.
  * Every send is logged to the EmailLog collection.
  */
 
-import nodemailer from "nodemailer";
-import dns from "dns";
+import { Resend } from "resend";
 import PDFDocument from "pdfkit";
 import dotenv from "dotenv";
 import EmailLog from "../models/EmailLog.js";
 
-// Force IPv4-first globally
-dns.setDefaultResultOrder("ipv4first");
-
 dotenv.config();
 
-let transporter;
-
-// Lazy initialization of transporter
-const getTransporter = () => {
-  if (!transporter) {
-    console.log("DEBUG: Initializing Nuclear SMTP fix for Render...");
-
-    transporter = nodemailer.createTransport({
-      host: "64.233.184.108", // Direct IPv4 for smtp.gmail.com
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER || process.env.SMTP_USER,
-        pass: process.env.EMAIL_PASS || process.env.SMTP_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false,
-        servername: "smtp.gmail.com",
-      },
-      connectionTimeout: 60000,
-      greetingTimeout: 60000,
-    });
-  }
-  return transporter;
-};
+// ─────────────────────────────────────────────
+// Resend Client
+// ─────────────────────────────────────────────
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM   = process.env.SMTP_FROM || "SDI Health Care <onboarding@resend.dev>";
 
 // ─────────────────────────────────────────────
 // Brand Tokens
@@ -449,21 +426,54 @@ export const generatePrescriptionPDF = (prescription) => {
 // ─────────────────────────────────────────────
 // Core Send Function with Logging
 // ─────────────────────────────────────────────
+
+// Verified email for Resend testing (no domain)
+const RESEND_VERIFIED_EMAIL = process.env.RESEND_VERIFIED_EMAIL || process.env.SMTP_USER || "";
+// Set to true once you verify a domain at resend.com/domains
+const DOMAIN_VERIFIED = process.env.RESEND_DOMAIN_VERIFIED === "true";
+
 const sendEmail = async ({ to, subject, html, type, userId = null, relatedEntityId = null, attachments = [] }) => {
   const startTime = Date.now();
-  const from = process.env.SMTP_FROM || '"SDI Health Care" <noreply@sdihealth.com>';
+
+  // ── Domain not verified: redirect to your own email in testing ──
+  let actualTo = to;
+  let redirected = false;
+
+  if (!DOMAIN_VERIFIED && RESEND_VERIFIED_EMAIL) {
+    if (to.toLowerCase() !== RESEND_VERIFIED_EMAIL.toLowerCase()) {
+      console.warn(`⚠️  Email [${type}] redirected: ${to} → ${RESEND_VERIFIED_EMAIL} (domain not verified)`);
+      actualTo   = RESEND_VERIFIED_EMAIL;
+      redirected = true;
+      // Prepend redirect notice to subject so you know who it was meant for
+      subject = `[TEST → ${to}] ${subject}`;
+    }
+  }
+
+  // Build Resend payload
+  const payload = { from: FROM, to: actualTo, subject, html };
+
+  if (attachments.length > 0) {
+    payload.attachments = attachments.map((a) => ({
+      filename:    a.filename,
+      content:     a.content,
+      contentType: a.contentType || "application/octet-stream",
+    }));
+  }
 
   try {
-    const info = await getTransporter().sendMail({ from, to, subject, html, attachments });
-    const durationMs = Date.now() - startTime;
+    const { data, error } = await resend.emails.send(payload);
 
-    await EmailLog.create({ to, subject, type, userId, relatedEntityId, status: "sent", messageId: info.messageId, durationMs });
-    console.log(`✉️  Email [${type}] → ${to} (${durationMs}ms) ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
+    if (error) throw new Error(error.message || JSON.stringify(error));
+
+    const durationMs = Date.now() - startTime;
+    await EmailLog.create({ to, subject, type, userId, relatedEntityId, status: "sent", messageId: data.id, durationMs });
+    console.log(`✉️  Email [${type}] → ${actualTo}${redirected ? ` (was: ${to})` : ""} (${durationMs}ms) id:${data.id}`);
+    return { success: true, messageId: data.id };
+
   } catch (error) {
     const durationMs = Date.now() - startTime;
     await EmailLog.create({ to, subject, type, userId, relatedEntityId, status: "failed", error: error.message, durationMs }).catch(() => {});
-    console.error(`❌ Email [${type}] FAILED → ${to}: ${error.message}`);
+    console.error(`❌ Email [${type}] FAILED → ${actualTo}: ${error.message}`);
     return { success: false, error: error.message };
   }
 };
