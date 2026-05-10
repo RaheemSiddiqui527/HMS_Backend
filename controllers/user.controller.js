@@ -3,6 +3,9 @@
  */
 
 import User from "../models/User.js";
+import Doctor from "../models/Doctor.js";
+import Appointment from "../models/Appointment.js";
+import Prescription from "../models/Prescription.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { validate, authSchemas } from "../utils/validators.js";
 import { comparePassword, hashPassword } from "../utils/hash.js";
@@ -135,6 +138,33 @@ const getUserById = async (req, res, next) => {
   }
 };
 
+const getDoctorStats = async (req, res, next) => {
+  try {
+    const doctorId = req.user.id;
+    
+    // Find doctor
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return sendError(res, "Doctor records not found", 404);
+    }
+
+    // Count real appointments
+    const totalAppointments = await Appointment.countDocuments({ doctorId });
+    
+    // Count real prescriptions
+    const totalPrescriptions = await Prescription.countDocuments({ doctorId });
+
+    return sendSuccess(res, {
+      totalPatients: doctor.totalPatients || 0,
+      totalAppointments,
+      totalPrescriptions,
+      experience: doctor.yearsOfExperience || 0
+    }, "Doctor stats retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Export all functions as default
 export default {
   getProfile,
@@ -142,4 +172,5 @@ export default {
   changePassword,
   deleteAccount,
   getUserById,
+  getDoctorStats,
 };

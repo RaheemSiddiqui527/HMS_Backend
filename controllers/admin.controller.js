@@ -184,6 +184,32 @@ const updateUserStatus = async (req, res, next) => {
   }
 };
 
+const updateUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const updateData = req.body;
+
+    // Prevent role/email changes via this endpoint for security
+    delete updateData.role;
+    delete updateData.email;
+    delete updateData.password;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { ...updateData, updatedAt: new Date() },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) {
+      return sendError(res, "User not found", 404);
+    }
+
+    return sendSuccess(res, user.toJSON(), "User updated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Delete user (soft delete or hard delete)
 const deleteUser = async (req, res, next) => {
   try {
@@ -249,6 +275,7 @@ export default {
   createDoctor,
   createStaff,
   updateUserStatus,
+  updateUser,
   deleteUser,
   getStats,
 };

@@ -55,6 +55,7 @@ const getNotifications = async (req, res, next) => {
     const filter = {
       $or: [
         { recipientId: req.user.id },
+        { senderId: req.user.id },
         { 
           isBroadcast: true, 
           recipientRole: { $in: ["all", req.user.role, null, ""] }

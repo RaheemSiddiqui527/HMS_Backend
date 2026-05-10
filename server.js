@@ -14,6 +14,11 @@ import prescriptionRoutes from "./routes/prescription.route.js";
 import notificationRoutes from "./routes/notification.route.js";
 import medicalRecordRoutes from "./routes/medicalRecord.route.js";
 import reportRoutes from "./routes/report.route.js";
+import emailRoutes from "./routes/email.route.js";
+import pushRoutes from "./routes/push.route.js";
+import blogRoutes from "./routes/blog.route.js";
+import inquiryRoutes from "./routes/inquiry.route.js";
+import faqRoutes from "./routes/faq.route.js";
 
 dotenv.config();
 
@@ -43,6 +48,11 @@ app.use("/api/v1/prescriptions", prescriptionRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/medical-records", medicalRecordRoutes);
 app.use("/api/v1/reports", reportRoutes);
+app.use("/api/v1/email", emailRoutes);
+app.use("/api/v1/push", pushRoutes);
+app.use("/api/v1/blogs", blogRoutes);
+app.use("/api/v1/inquiries", inquiryRoutes);
+app.use("/api/v1/faqs", faqRoutes);
 
 // Health check
 app.get("/", (req, res) => {

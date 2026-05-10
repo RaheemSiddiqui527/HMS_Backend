@@ -13,6 +13,10 @@ import { sendSuccess, sendError } from "../utils/response.js";
 import { validate, authSchemas } from "../utils/validators.js";
 import { ValidationError, AuthenticationError, NotFoundError, ConflictError } from "../utils/errors.js";
 import { parseUA } from "../utils/uaParser.js";
+import notifyService from "../utils/notifyService.js";
+import { OAuth2Client } from "google-auth-library";
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Register user based on role
 const register = async (req, res, next) => {
@@ -99,6 +103,9 @@ const register = async (req, res, next) => {
       status: "active",
     });
 
+    // Send welcome email + in-app notification (non-blocking)
+    notifyService.notifyWelcome(newUser).catch(() => {});
+
     // Return response without password
     const userResponse = newUser.toJSON();
 
@@ -153,13 +160,17 @@ const login = async (req, res, next) => {
 
     // Create session
     const deviceInfo = parseUA(req.headers["user-agent"]);
+    const ipAddress = req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
     await Session.create({
       userId: user._id,
       token,
       deviceInfo,
-      ipAddress: req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress,
+      ipAddress,
       status: "active",
     });
+
+    // Send login alert email (non-blocking)
+    notifyService.notifyLoginAlert(user, deviceInfo, ipAddress).catch(() => {});
 
     // Return response without password
     const userResponse = user.toJSON();
@@ -268,6 +279,86 @@ const socialLogin = async (req, res, next) => {
     );
   } catch (error) {
     next(error);
+  }
+};
+
+const googleLogin = async (req, res, next) => {
+  try {
+    const { idToken, role = "patient" } = req.body;
+
+    if (!idToken) {
+      return sendError(res, "Google ID Token is required", 400);
+    }
+
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { sub: providerId, email, given_name: firstName, family_name: lastName, picture: avatar } = payload;
+
+    // Use existing socialLogin logic or similar
+    let user = await User.findOne({ 
+      $or: [
+        { email },
+        { providerId, authProvider: "google" }
+      ]
+    });
+
+    if (user) {
+      if (!user.providerId || user.authProvider !== "google") {
+        user.providerId = providerId;
+        user.authProvider = "google";
+        if (avatar && !user.avatar) user.avatar = avatar;
+        await user.save();
+      }
+    } else {
+      const userData = {
+        email,
+        firstName: firstName || "Google",
+        lastName: lastName || "User",
+        role,
+        authProvider: "google",
+        providerId,
+        avatar,
+        status: "active",
+      };
+
+      switch (role) {
+        case "patient": user = new Patient(userData); break;
+        case "doctor": user = new Doctor({ ...userData, isVerified: false }); break;
+        case "admin": user = new Admin(userData); break;
+        case "staff": user = new Staff(userData); break;
+        default: user = new Patient(userData);
+      }
+      await user.save();
+      notifyService.notifyWelcome(user).catch(() => {});
+    }
+
+    if (user.status === "inactive") {
+      return sendError(res, "Your account has been deactivated", 403);
+    }
+
+    const token = generateAccessToken({
+      id: user._id,
+      email: user.email,
+      role: user.role,
+    });
+
+    const deviceInfo = parseUA(req.headers["user-agent"]);
+    await Session.create({
+      userId: user._id,
+      token,
+      deviceInfo,
+      ipAddress: req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress,
+      status: "active",
+    });
+
+    return sendSuccess(res, { user: user.toJSON(), token }, "Google login successful");
+  } catch (error) {
+    console.error("Google Auth Error:", error);
+    return sendError(res, "Google authentication failed", 401);
   }
 };
 
@@ -403,15 +494,55 @@ const refreshToken = async (req, res, next) => {
   }
 };
 
+const getProfile = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return sendError(res, "User not found", 404);
+    }
+    return sendSuccess(res, user.toJSON(), "Profile retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateProfile = async (req, res, next) => {
+  try {
+    const updateData = req.body;
+    
+    // Prevent role change via profile update
+    delete updateData.role;
+    delete updateData.password;
+    delete updateData.email;
+
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { ...updateData, updatedAt: new Date() },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) {
+      return sendError(res, "User not found", 404);
+    }
+
+    return sendSuccess(res, user.toJSON(), "Profile updated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Export all functions as default
 export default {
   register,
   login,
   socialLogin,
+  googleLogin,
   logout,
   verifyUserToken,
   refreshToken,
   getSessions,
   revokeSession,
   revokeAllOtherSessions,
+  getProfile,
+  updateProfile,
 };

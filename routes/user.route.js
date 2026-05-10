@@ -13,6 +13,7 @@ router.get("/profile", protect, userController.getProfile);
 router.patch("/profile", protect, userController.updateProfile);
 router.post("/change-password", protect, userController.changePassword);
 router.delete("/account", protect, userController.deleteAccount);
+router.get("/doctor-stats", protect, userController.getDoctorStats);
 
 // Admin routes
 router.get("/:userId", protect, userController.getUserById);

@@ -8,6 +8,7 @@ const router = express.Router();
 router.post("/register", authController.register);
 router.post("/login", authController.login);
 router.post("/social-login", authController.socialLogin);
+router.post("/google", authController.googleLogin);
 
 // Protected routes
 router.post("/logout", protect, authController.logout);
@@ -18,5 +19,9 @@ router.post("/refresh-token", protect, authController.refreshToken);
 router.get("/sessions", protect, authController.getSessions);
 router.delete("/sessions/:sessionId", protect, authController.revokeSession);
 router.delete("/sessions", protect, authController.revokeAllOtherSessions);
+
+// Profile management
+router.get("/profile", protect, authController.getProfile);
+router.patch("/profile", protect, authController.updateProfile);
 
 export default router;

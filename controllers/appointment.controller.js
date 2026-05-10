@@ -8,6 +8,7 @@ import Patient from "../models/Patient.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { validate, appointmentSchemas } from "../utils/validators.js";
 import { NotFoundError, ConflictError, ValidationError } from "../utils/errors.js";
+import notifyService from "../utils/notifyService.js";
 
 // Get all active doctors - accessible to patients for booking
 const getAvailableDoctors = async (req, res, next) => {
@@ -188,6 +189,9 @@ const bookAppointment = async (req, res, next) => {
       .populate("patientId")
       .populate("doctorId");
 
+    // Send email + in-app notification to both patient and doctor (non-blocking)
+    notifyService.notifyAppointmentBooked(populatedAppointment).catch(() => {});
+
     return sendSuccess(res, populatedAppointment, "Appointment booked successfully", 201);
   } catch (error) {
     next(error);
@@ -291,6 +295,13 @@ const updateAppointmentStatus = async (req, res, next) => {
       return sendError(res, "Appointment not found", 404);
     }
 
+    // Trigger notifications based on new status (non-blocking)
+    if (status === "confirmed") {
+      notifyService.notifyAppointmentConfirmed(appointment).catch(() => {});
+    } else if (status === "cancelled") {
+      notifyService.notifyAppointmentCancelled(appointment, req.user?.role || "system").catch(() => {});
+    }
+
     return sendSuccess(res, appointment, "Appointment status updated successfully");
   } catch (error) {
     next(error);
@@ -318,6 +329,9 @@ const cancelAppointment = async (req, res, next) => {
     if (!appointment) {
       return sendError(res, "Appointment not found", 404);
     }
+
+    // Notify both patient and doctor about cancellation (non-blocking)
+    notifyService.notifyAppointmentCancelled(appointment, req.user?.role || "system").catch(() => {});
 
     return sendSuccess(res, appointment, "Appointment cancelled successfully");
   } catch (error) {
@@ -385,6 +399,26 @@ const getMyPatients = async (req, res, next) => {
   }
 };
 
+const markAsPaid = async (req, res, next) => {
+  try {
+    const { appointmentId } = req.params;
+
+    const appointment = await Appointment.findByIdAndUpdate(
+      appointmentId,
+      { paymentStatus: "completed", updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!appointment) {
+      return sendError(res, "Appointment not found", 404);
+    }
+
+    return sendSuccess(res, appointment, "Appointment marked as paid successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Export all functions as default
 export default {
   checkAvailability,
@@ -396,5 +430,6 @@ export default {
   cancelAppointment,
   getDoctorSchedule,
   generateSlots,
-  getMyPatients
+  getMyPatients,
+  markAsPaid
 };

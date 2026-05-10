@@ -21,8 +21,9 @@ router.get("/my-patients", protect, requireRole("doctor"), appointmentController
 router.get("/schedule", protect, appointmentController.getDoctorSchedule);
 router.get("/:appointmentId", protect, appointmentController.getAppointmentById);
 
-// Doctor/Admin only - update status
+// Doctor/Admin only - update status & payment
 router.patch("/:appointmentId/status", protect, requireRole("doctor", "admin"), appointmentController.updateAppointmentStatus);
+router.patch("/:appointmentId/mark-paid", protect, requireRole("doctor", "admin"), appointmentController.markAsPaid);
 
 // Cancel appointment
 router.patch("/:appointmentId/cancel", protect, appointmentController.cancelAppointment);

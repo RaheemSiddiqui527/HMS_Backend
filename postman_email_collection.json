@@ -1,0 +1,424 @@
+{
+  "info": {
+    "name": "HMS — Email & Notification API",
+    "_postman_id": "email-notify-hms-2026",
+    "description": "Email Service + Custom Notifications testing collection for HMS Backend.\n\n📌 SETUP:\n1. Login first → copy token → set {{authToken}} variable\n2. Set {{userId}} to any user's MongoDB _id for targeted sends\n\n🌐 Base URL: http://localhost:5000/api/v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api/v1" },
+    { "key": "authToken", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "logId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "🔐 Step 1 — Login (Get Token)",
+      "item": [
+        {
+          "name": "Login as Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.token) {",
+                  "  pm.collectionVariables.set('authToken', res.data.token);",
+                  "  pm.collectionVariables.set('userId', res.data.user._id);",
+                  "  console.log('✅ Token saved:', res.data.token.slice(0,30) + '...');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@medicare.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "description": "Login as Admin. Token is auto-saved to {{authToken}} via test script."
+          }
+        },
+        {
+          "name": "Login as Doctor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.token) {",
+                  "  pm.collectionVariables.set('authToken', res.data.token);",
+                  "  pm.collectionVariables.set('userId', res.data.user._id);",
+                  "  console.log('✅ Doctor token saved');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"doctor@medicare.com\",\n  \"password\": \"doctor123\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Email Logs (Admin Only)",
+      "item": [
+        {
+          "name": "Get Email Stats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/email/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "stats"]
+            },
+            "description": "Dashboard stats: total sent, failed, success rate, breakdown by type, last 7 days daily chart."
+          }
+        },
+        {
+          "name": "Get All Email Logs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/email/logs?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "logs"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "Get all email logs with pagination."
+          }
+        },
+        {
+          "name": "Filter Logs — Sent Only",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/email/logs?status=sent&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "logs"],
+              "query": [
+                { "key": "status", "value": "sent" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filter Logs — Failed Only",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/email/logs?status=failed",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "logs"],
+              "query": [{ "key": "status", "value": "failed" }]
+            }
+          }
+        },
+        {
+          "name": "Filter Logs — By Type (welcome)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/email/logs?type=welcome",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "logs"],
+              "query": [{ "key": "type", "value": "welcome" }]
+            },
+            "description": "Types: welcome | appointment_booked | appointment_confirmed | appointment_cancelled | prescription | login_alert | custom"
+          }
+        },
+        {
+          "name": "Get Single Email Log",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/email/logs/{{logId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "logs", "{{logId}}"]
+            },
+            "description": "Replace {{logId}} with actual MongoDB _id from logs list."
+          }
+        },
+        {
+          "name": "Delete Single Email Log",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/email/logs/{{logId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "logs", "{{logId}}"]
+            }
+          }
+        },
+        {
+          "name": "Purge Old Logs (30 days)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/email/purge?days=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "purge"],
+              "query": [{ "key": "days", "value": "30" }]
+            },
+            "description": "Delete all email logs older than N days."
+          }
+        }
+      ]
+    },
+    {
+      "name": "📧 Custom Notifications (Admin + Doctor)",
+      "item": [
+        {
+          "name": "🎂 Happy Birthday — Single User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/email/notify",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "notify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateType\": \"birthday\",\n  \"recipientType\": \"user\",\n  \"userId\": \"{{userId}}\",\n  \"customMessage\": \"Wishing you a wonderful birthday full of good health and happiness! JazakAllah Khair.\"\n}"
+            },
+            "description": "Send Happy Birthday email + in-app notification to a single user.\n\n✏️ Replace {{userId}} with actual user MongoDB _id."
+          }
+        },
+        {
+          "name": "🎂 Happy Birthday — All Patients",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/email/notify",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "notify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateType\": \"birthday\",\n  \"recipientType\": \"role\",\n  \"role\": \"patient\",\n  \"customMessage\": \"May Allah bless you with great health on your special day. Ameen.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "🌙 Eid ul-Fitr Mubarak — All Users",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/email/notify",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "notify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateType\": \"eid_fitr\",\n  \"recipientType\": \"all\",\n  \"customMessage\": \"Eid Mubarak from the entire SDI Health Care team! May Allah accept your ibadah and bless you and your family.\"\n}"
+            },
+            "description": "Send Eid ul-Fitr Mubarak email to ALL active users."
+          }
+        },
+        {
+          "name": "🐑 Eid ul-Adha Mubarak — All Doctors",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/email/notify",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "notify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateType\": \"eid_adha\",\n  \"recipientType\": \"role\",\n  \"role\": \"doctor\",\n  \"customMessage\": \"JazakAllah Khair for your dedicated service to our patients. Eid ul-Adha Mubarak!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "🌙✨ Ramadan Mubarak — All Users",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/email/notify",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "notify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateType\": \"ramadan\",\n  \"recipientType\": \"all\",\n  \"customMessage\": \"May this blessed month of Ramadan bring you peace, barakah, and forgiveness. Ramadan Mubarak from SDI Health Care!\"\n}"
+            },
+            "description": "Send Ramadan Mubarak email + in-app notification to all active users."
+          }
+        },
+        {
+          "name": "🌙✨ Ramadan Mubarak — Single User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/email/notify",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "notify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateType\": \"ramadan\",\n  \"recipientType\": \"user\",\n  \"userId\": \"{{userId}}\",\n  \"customMessage\": \"Ramadan Kareem! May Allah accept your fast and prayers. Ameen.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "🕌 Jumma Mubarak — All Staff",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/email/notify",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "notify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateType\": \"jumma\",\n  \"recipientType\": \"role\",\n  \"role\": \"staff\",\n  \"customMessage\": \"Jumma Mubarak to our dedicated staff! May Allah reward your hard work. JazakAllah Khair.\"\n}"
+            },
+            "description": "Send Jumma Mubarak to all staff members."
+          }
+        },
+        {
+          "name": "🕌 Jumma Mubarak — All Users",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/email/notify",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "notify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateType\": \"jumma\",\n  \"recipientType\": \"all\"\n}"
+            }
+          }
+        },
+        {
+          "name": "⭐ Islamic New Year — All Users",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/email/notify",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "notify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateType\": \"islamic_new_year\",\n  \"recipientType\": \"all\",\n  \"customMessage\": \"As we begin the new Hijri year, may Allah fill it with barakah, health, and success for you and your family. Ameen.\"\n}"
+            },
+            "description": "Send Islamic New Year greetings to all users."
+          }
+        },
+        {
+          "name": "💬 Custom Message — Single User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/email/notify",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "notify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateType\": \"custom\",\n  \"recipientType\": \"user\",\n  \"userId\": \"{{userId}}\",\n  \"subject\": \"Important Update from SDI Health Care\",\n  \"title\": \"Appointment Schedule Change\",\n  \"message\": \"Dear Patient, we would like to inform you that our clinic timings have been updated.\\n\\nNew Timings: 9:00 AM - 5:00 PM (Monday to Saturday)\\n\\nJazakAllah Khair for your understanding.\",\n  \"emoji\": \"📢\",\n  \"badgeText\": \"Important Notice\",\n  \"badgeColor\": \"#dc2626\",\n  \"ctaText\": \"View Portal →\",\n  \"ctaUrl\": \"http://localhost:3000/patient/dashboard\"\n}"
+            },
+            "description": "Send a free-form custom message with any subject, title, body, and optional CTA button."
+          }
+        },
+        {
+          "name": "💬 Custom Message — All Patients",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/email/notify",
+              "host": ["{{baseUrl}}"],
+              "path": ["email", "notify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateType\": \"custom\",\n  \"recipientType\": \"role\",\n  \"role\": \"patient\",\n  \"subject\": \"Health Tip of the Week\",\n  \"title\": \"🌿 Stay Healthy This Week!\",\n  \"message\": \"Assalamu Alaikum,\\n\\nHere is your weekly health tip from SDI Health Care:\\n\\n✅ Drink 8 glasses of water daily\\n✅ Take a 30-minute walk\\n✅ Sleep 7-8 hours per night\\n\\nInshAllah, these small steps will make a big difference. JazakAllah Khair!\",\n  \"emoji\": \"💚\",\n  \"badgeText\": \"Health Tip\",\n  \"badgeColor\": \"#16a34a\"\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import Patient from "../models/Patient.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { validate, prescriptionSchemas } from "../utils/validators.js";
 import { NotFoundError } from "../utils/errors.js";
+import notifyService from "../utils/notifyService.js";
 
 // Create prescription
 const createPrescription = async (req, res, next) => {
@@ -50,11 +51,9 @@ const createPrescription = async (req, res, next) => {
       .populate({ path: "doctorId", model: "Doctor" })
       .populate({ path: "patientId", model: "Patient" });
 
-    // Send automatic email notification
-    if (populatedPrescription.patientId && populatedPrescription.patientId.email) {
-      import("../utils/email.js").then((emailUtil) => {
-        emailUtil.sendPrescriptionEmail(populatedPrescription);
-      });
+    // Send email + in-app notification to patient (non-blocking)
+    if (populatedPrescription.patientId?.email) {
+      notifyService.notifyPrescriptionIssued(populatedPrescription).catch(() => {});
     }
 
     return sendSuccess(res, populatedPrescription, "Prescription created successfully", 201);

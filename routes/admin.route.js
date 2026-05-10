@@ -5,6 +5,7 @@
 import express from "express";
 import adminController from "../controllers/admin.controller.js";
 import notificationController from "../controllers/notification.controller.js";
+import reportsController from "../controllers/reports.controller.js";
 import { protect, requireRole } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
@@ -13,15 +14,16 @@ const router = express.Router();
 router.get("/users", protect, requireRole("admin", "doctor", "staff"), adminController.getAllUsers);
 router.get("/users/:userId", protect, requireRole("admin", "doctor", "staff"), adminController.getUserById);
 
-// Notifications (Accessible by Admin and Doctor)
-router.get("/notifications", protect, requireRole("admin", "doctor"), notificationController.getAllNotifications);
-router.post("/notifications/broadcast", protect, requireRole("admin", "doctor"), notificationController.sendBroadcast);
+// Specific management actions accessible by Admin and Doctor
+router.patch("/users/:userId/status", protect, requireRole("admin", "doctor"), adminController.updateUserStatus);
+router.patch("/users/:userId", protect, requireRole("admin", "doctor"), adminController.updateUser);
+router.delete("/users/:userId", protect, requireRole("admin", "doctor"), adminController.deleteUser);
 
-// All other admin routes require authentication and admin role strictly
+// Strict Admin-only routes
 router.use(protect, requireRole("admin"));
 
-router.patch("/users/:userId/status", adminController.updateUserStatus);
-router.delete("/users/:userId", adminController.deleteUser);
+router.get("/notifications", notificationController.getAllNotifications);
+router.post("/notifications/broadcast", notificationController.sendBroadcast);
 
 // Doctor management
 router.post("/doctors", adminController.createDoctor);
@@ -29,7 +31,8 @@ router.post("/doctors", adminController.createDoctor);
 // Staff management
 router.post("/staff", adminController.createStaff);
 
-// Statistics
+// Statistics & Reports
 router.get("/stats", adminController.getStats);
+router.get("/reports", reportsController.getAdminReports);
 
 export default router;
