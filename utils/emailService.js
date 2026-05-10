@@ -5,68 +5,52 @@
  */
 
 import nodemailer from "nodemailer";
-import dns from "dns";
+import PDFDocument from "pdfkit";
 import dotenv from "dotenv";
 import EmailLog from "../models/EmailLog.js";
 
-// Force IPv4-first globally (belt-and-suspenders alongside server.js)
-dns.setDefaultResultOrder("ipv4first");
-
 dotenv.config();
 
-let transporter;
+// ─────────────────────────────────────────────
+// Transporter
+// ─────────────────────────────────────────────
+const SMTP_PORT = parseInt(process.env.SMTP_PORT) || 587;
 
-// Lazy initialization of transporter
-const getTransporter = () => {
-  if (!transporter) {
-    console.log("DEBUG: Initializing Nuclear SMTP fix for Render...");
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || "smtp.gmail.com",
+  port: SMTP_PORT,
+  // Port 465 = SSL (secure:true) | Port 587 = STARTTLS (secure:false)
+  secure: SMTP_PORT === 465,
+  auth: {
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASS || "",
+  },
+  tls: { rejectUnauthorized: false },
+});
 
-    transporter = nodemailer.createTransport({
-      host: "64.233.184.108", // Direct IPv4 for smtp.gmail.com (Safe with servername)
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false,
-        servername: "smtp.gmail.com", // Essential for SSL with IP host
-      },
-      connectionTimeout: 60000,
-      greetingTimeout: 60000,
-    });
-
-    // Verify connection configuration
-    transporter.verify((error) => {
-      if (error) {
-        console.log("❌ Email Service Error (Nuclear):", error);
-      } else {
-        console.log("✅ Email Service is ready (Nuclear IPv4)");
-      }
-    });
-  }
-  return transporter;
-};
+transporter.verify((error) => {
+  if (error) console.error("❌ SMTP connection failed:", error.message);
+  else console.log(`✅ SMTP ready — ${process.env.SMTP_USER}`);
+});
 
 // ─────────────────────────────────────────────
 // Brand Tokens
 // ─────────────────────────────────────────────
 const BRAND = {
-  green: "#1a7a4a",   // Primary SDI green
-  greenDark: "#0f5132",   // Dark green (header gradient end)
-  greenDeep: "#0a3d26",   // Deepest green (header gradient start)
-  greenLight: "#e8f5ee",   // Light green tint background
-  greenMint: "#d1f0e0",   // Mint accent
+  green:       "#1a7a4a",   // Primary SDI green
+  greenDark:   "#0f5132",   // Dark green (header gradient end)
+  greenDeep:   "#0a3d26",   // Deepest green (header gradient start)
+  greenLight:  "#e8f5ee",   // Light green tint background
+  greenMint:   "#d1f0e0",   // Mint accent
   greenAccent: "#22c55e",   // Bright green accent / CTA
-  white: "#ffffff",
-  offWhite: "#f8faf9",
-  navy: "#0f172a",
-  slateText: "#374151",
-  mutedText: "#6b7280",
-  border: "#d1e8da",
-  shadow: "rgba(10, 61, 38, 0.12)",
-  portalUrl: process.env.FRONTEND_URL || "http://localhost:3000",
+  white:       "#ffffff",
+  offWhite:    "#f8faf9",
+  navy:        "#0f172a",
+  slateText:   "#374151",
+  mutedText:   "#6b7280",
+  border:      "#d1e8da",
+  shadow:      "rgba(10, 61, 38, 0.12)",
+  portalUrl:   process.env.FRONTEND_URL || "http://localhost:3000",
 };
 
 // ─────────────────────────────────────────────
@@ -225,9 +209,9 @@ const ctaButton = (text, href, color = BRAND.green) =>
 const alertBox = (text, type = "warning") => {
   const styles = {
     warning: { bg: "#fffbeb", border: "#f59e0b", text: "#78350f" },
-    danger: { bg: "#fef2f2", border: "#dc2626", text: "#7f1d1d" },
-    success: { bg: "#f0fdf4", border: BRAND.green, text: "#14532d" },
-    info: { bg: "#eff6ff", border: "#3b82f6", text: "#1e3a8a" },
+    danger:  { bg: "#fef2f2", border: "#dc2626", text: "#7f1d1d" },
+    success: { bg: "#f0fdf4", border: BRAND.green,  text: "#14532d" },
+    info:    { bg: "#eff6ff", border: "#3b82f6", text: "#1e3a8a" },
   }[type] || styles.info;
   return `<div style="background:${styles.bg};border-left:4px solid ${styles.border};border-radius:0 10px 10px 0;padding:14px 18px;margin-top:20px;">
     <p style="margin:0;font-size:13px;color:${styles.text};line-height:1.6;">${text}</p>
@@ -242,14 +226,227 @@ const sectionHead = (title, icon = "") =>
   </div>`;
 
 // ─────────────────────────────────────────────
+// PDF Generator — Prescription
+// ─────────────────────────────────────────────
+
+/**
+ * Generates a branded SDI Health Care prescription PDF.
+ * Returns a Promise<Buffer> — ready to attach to nodemailer.
+ */
+export const generatePrescriptionPDF = (prescription) => {
+  return new Promise((resolve, reject) => {
+    const { patientId, doctorId, medications, notes, diagnosis, createdDate, _id } = prescription;
+    const rxId   = `RX-${_id.toString().slice(-8).toUpperCase()}`;
+    const issued = new Date(createdDate || Date.now()).toLocaleDateString("en-IN", { dateStyle: "long" });
+
+    // ── Colors ──────────────────────────────────
+    const GREEN_DEEP  = "#0a3d26";
+    const GREEN_MAIN  = "#1a7a4a";
+    const GREEN_LIGHT = "#e8f5ee";
+    const GREEN_ACC   = "#22c55e";
+    const NAVY        = "#0f172a";
+    const SLATE       = "#374151";
+    const MUTED       = "#6b7280";
+    const BORDER      = "#d1e8da";
+    const WHITE       = "#ffffff";
+
+    const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
+    const chunks = [];
+    doc.on("data",  (c) => chunks.push(c));
+    doc.on("end",   ()  => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const W = doc.page.width;   // 595
+    const H = doc.page.height;  // 842
+    const ML = 50, MR = 50;     // left/right margin
+    const CW = W - ML - MR;     // content width = 495
+
+    // ── Helper: hex to RGB ───────────────────
+    const hex = (h) => {
+      const n = parseInt(h.replace("#",""), 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    };
+
+    // ── TOP GRADIENT HEADER ──────────────────
+    // Simulate gradient with two overlapping rects
+    doc.rect(0, 0, W, 110).fill(GREEN_DEEP);
+    doc.rect(W * 0.5, 0, W * 0.5, 110).fillOpacity(0.35).fill(GREEN_MAIN);
+    doc.fillOpacity(1);
+
+    // Top accent stripe
+    doc.rect(0, 0, W, 5).fill(GREEN_ACC);
+
+    // SDI logo box
+    doc.roundedRect(ML, 22, 50, 50, 8).fill(WHITE);
+    doc.font("Helvetica-Bold").fontSize(16).fillColor(GREEN_DEEP)
+       .text("SDI", ML, 40, { width: 50, align: "center" });
+
+    // Brand name
+    doc.font("Helvetica-Bold").fontSize(18).fillColor(WHITE)
+       .text("SDI Health Care", ML + 62, 28);
+    doc.font("Helvetica").fontSize(8).fillColor("rgba(255,255,255,0.5)")
+       .text("OFFICIAL MEDICAL DOCUMENT", ML + 62, 50, { characterSpacing: 1.5 });
+
+    // "Digital Prescription" pill on right
+    doc.roundedRect(W - MR - 140, 30, 140, 26, 13)
+       .strokeColor("rgba(255,255,255,0.25)").lineWidth(1).stroke();
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(WHITE)
+       .text("DIGITAL PRESCRIPTION", W - MR - 140, 39, { width: 140, align: "center", characterSpacing: 1 });
+
+    // Bottom stripe on header
+    doc.rect(0, 105, W, 5).fill(GREEN_ACC);
+
+    // ── RX ID BAND ───────────────────────────
+    doc.rect(0, 110, W, 36).fill(GREEN_LIGHT);
+    doc.font("Helvetica-Bold").fontSize(11).fillColor(GREEN_MAIN)
+       .text(`Prescription ID: ${rxId}`, ML, 122);
+    doc.font("Helvetica").fontSize(10).fillColor(MUTED)
+       .text(`Issued: ${issued}`, 0, 122, { width: W - MR, align: "right" });
+
+    let y = 165;
+
+    // ── SECTION: Patient & Doctor info ───────
+    const boxH = 90;
+    // Patient box
+    doc.roundedRect(ML, y, CW * 0.48, boxH, 8).fill(GREEN_LIGHT);
+    doc.rect(ML, y, 4, boxH).fill(GREEN_MAIN);
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(GREEN_MAIN)
+       .text("PATIENT DETAILS", ML + 14, y + 12, { characterSpacing: 1 });
+    doc.font("Helvetica-Bold").fontSize(13).fillColor(NAVY)
+       .text(`${patientId.firstName} ${patientId.lastName}`, ML + 14, y + 26);
+    doc.font("Helvetica").fontSize(9).fillColor(SLATE)
+       .text(patientId.email || "", ML + 14, y + 44)
+       .text(patientId.phone || "", ML + 14, y + 58);
+
+    // Doctor box
+    const dxOff = ML + CW * 0.52;
+    doc.roundedRect(dxOff, y, CW * 0.48, boxH, 8).fill(GREEN_LIGHT);
+    doc.rect(dxOff, y, 4, boxH).fill(GREEN_MAIN);
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(GREEN_MAIN)
+       .text("PRESCRIBING DOCTOR", dxOff + 14, y + 12, { characterSpacing: 1 });
+    doc.font("Helvetica-Bold").fontSize(13).fillColor(NAVY)
+       .text(`Dr. ${doctorId.firstName} ${doctorId.lastName}`, dxOff + 14, y + 26);
+    doc.font("Helvetica").fontSize(9).fillColor(SLATE)
+       .text(doctorId.specialization || "General Practice", dxOff + 14, y + 44)
+       .text(doctorId.email || "", dxOff + 14, y + 58);
+
+    y += boxH + 18;
+
+    // ── Diagnosis ────────────────────────────
+    if (diagnosis) {
+      doc.roundedRect(ML, y, CW, 38, 6).fill("#f0fdf4");
+      doc.rect(ML, y, 4, 38).fill(GREEN_ACC);
+      doc.font("Helvetica-Bold").fontSize(8).fillColor(GREEN_MAIN)
+         .text("DIAGNOSIS", ML + 14, y + 8, { characterSpacing: 1 });
+      doc.font("Helvetica").fontSize(11).fillColor(NAVY)
+         .text(diagnosis, ML + 14, y + 20, { width: CW - 28 });
+      y += 52;
+    }
+
+    // ── Medications Table ─────────────────────
+    doc.font("Helvetica-Bold").fontSize(11).fillColor(NAVY)
+       .text("Prescribed Medications", ML, y);
+    doc.rect(ML, y + 16, 36, 2).fill(GREEN_ACC);
+    y += 28;
+
+    const colWidths = [170, 80, 120, 80];  // name, dosage, frequency, duration
+    const colX = [ML, ML + 170, ML + 250, ML + 370];
+    const rowH = 32;
+
+    // Table header
+    doc.rect(ML, y, CW, rowH).fill(GREEN_DEEP);
+    const headers = ["Medication", "Dosage", "Frequency", "Duration"];
+    headers.forEach((h, i) => {
+      doc.font("Helvetica-Bold").fontSize(8).fillColor(WHITE)
+         .text(h, colX[i] + 10, y + 11, { width: colWidths[i] - 12, characterSpacing: 1 });
+    });
+    y += rowH;
+
+    // Table rows
+    medications.forEach((med, idx) => {
+      const rowBg = idx % 2 === 0 ? WHITE : GREEN_LIGHT;
+      doc.rect(ML, y, CW, rowH).fill(rowBg);
+      // left border accent on medicine name col
+      doc.rect(ML, y, 3, rowH).fill(GREEN_MAIN);
+
+      doc.font("Helvetica-Bold").fontSize(10).fillColor(NAVY)
+         .text(med.name, colX[0] + 10, y + 10, { width: colWidths[0] - 12 });
+      doc.font("Helvetica").fontSize(10).fillColor(SLATE)
+         .text(med.dosage,     colX[1] + 10, y + 10, { width: colWidths[1] - 12 })
+         .text(med.frequency,  colX[2] + 10, y + 10, { width: colWidths[2] - 12 });
+      doc.font("Helvetica-Bold").fontSize(10).fillColor(GREEN_MAIN)
+         .text(med.duration,   colX[3] + 10, y + 10, { width: colWidths[3] - 12 });
+
+      // Row bottom border
+      doc.rect(ML, y + rowH - 1, CW, 1).fill(BORDER);
+      y += rowH;
+    });
+
+    y += 20;
+
+    // ── Clinical Notes ────────────────────────
+    if (notes) {
+      doc.roundedRect(ML, y, CW, 20, 4).fill(GREEN_LIGHT);
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(GREEN_MAIN)
+         .text("CLINICAL NOTES", ML + 14, y + 6, { characterSpacing: 1 });
+      y += 28;
+
+      const noteLines = doc.heightOfString(notes, { width: CW - 28, fontSize: 10 });
+      const noteBoxH = noteLines + 24;
+      doc.roundedRect(ML, y, CW, noteBoxH, 6).fill("#f8faf9");
+      doc.rect(ML, y, 4, noteBoxH).fill(GREEN_MAIN);
+      doc.font("Helvetica-Oblique").fontSize(10).fillColor(NAVY)
+         .text(`"${notes}"`, ML + 16, y + 12, { width: CW - 28 });
+      y += noteBoxH + 18;
+    }
+
+    // ── Important Notice ──────────────────────
+    const noticeH = 52;
+    doc.roundedRect(ML, y, CW, noticeH, 6).fill("#fffbeb");
+    doc.rect(ML, y, 4, noticeH).fill("#f59e0b");
+    doc.font("Helvetica-Bold").fontSize(8).fillColor("#92400e")
+       .text("IMPORTANT", ML + 14, y + 10, { characterSpacing: 1 });
+    doc.font("Helvetica").fontSize(9).fillColor("#78350f")
+       .text(
+         "Take medicines as directed by your doctor. Do not self-medicate or adjust dosages without consultation. Keep this prescription safe for future reference.",
+         ML + 14, y + 24, { width: CW - 28 }
+       );
+    y += noticeH + 20;
+
+    // ── Doctor Signature area ─────────────────
+    const sigBoxW = 180;
+    doc.rect(W - MR - sigBoxW, y, sigBoxW, 1).fill(NAVY);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor(NAVY)
+       .text(`Dr. ${doctorId.firstName} ${doctorId.lastName}`, W - MR - sigBoxW, y + 6, { width: sigBoxW, align: "center" });
+    doc.font("Helvetica").fontSize(8).fillColor(MUTED)
+       .text(doctorId.specialization || "General Practice", W - MR - sigBoxW, y + 20, { width: sigBoxW, align: "center" })
+       .text("Authorised Signature", W - MR - sigBoxW, y + 32, { width: sigBoxW, align: "center" });
+
+    // ── FOOTER ───────────────────────────────
+    const footerY = H - 52;
+    doc.rect(0, footerY, W, 5).fill(GREEN_ACC);
+    doc.rect(0, footerY + 5, W, 47).fill(GREEN_DEEP);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor(WHITE)
+       .text("SDI Health Care", ML, footerY + 14);
+    doc.font("Helvetica").fontSize(8).fillColor("rgba(255,255,255,0.5)")
+       .text("Powered by Sunni Dawate Islami  |  Confidential Medical Document", ML, footerY + 28);
+    doc.font("Helvetica").fontSize(8).fillColor("rgba(255,255,255,0.5)")
+       .text(`Generated: ${new Date().toLocaleString("en-IN")}  |  ${rxId}`,
+             0, footerY + 28, { width: W - MR, align: "right" });
+
+    doc.end();
+  });
+};
+
+// ─────────────────────────────────────────────
 // Core Send Function with Logging
 // ─────────────────────────────────────────────
-const sendEmail = async ({ to, subject, html, type, userId = null, relatedEntityId = null }) => {
+const sendEmail = async ({ to, subject, html, type, userId = null, relatedEntityId = null, attachments = [] }) => {
   const startTime = Date.now();
   const from = process.env.SMTP_FROM || '"SDI Health Care" <noreply@sdihealth.com>';
 
   try {
-    const info = await getTransporter().sendMail({ from, to, subject, html });
+    const info = await transporter.sendMail({ from, to, subject, html, attachments });
     const durationMs = Date.now() - startTime;
 
     await EmailLog.create({ to, subject, type, userId, relatedEntityId, status: "sent", messageId: info.messageId, durationMs });
@@ -257,7 +454,7 @@ const sendEmail = async ({ to, subject, html, type, userId = null, relatedEntity
     return { success: true, messageId: info.messageId };
   } catch (error) {
     const durationMs = Date.now() - startTime;
-    await EmailLog.create({ to, subject, type, userId, relatedEntityId, status: "failed", error: error.message, durationMs }).catch(() => { });
+    await EmailLog.create({ to, subject, type, userId, relatedEntityId, status: "failed", error: error.message, durationMs }).catch(() => {});
     console.error(`❌ Email [${type}] FAILED → ${to}: ${error.message}`);
     return { success: false, error: error.message };
   }
@@ -292,11 +489,11 @@ export const sendWelcomeEmail = async (user) => {
     </p>
 
     ${infoBox([
-    ["Account Role", roleLabel],
-    ["Email", email],
-    ["Status", "✅ Active"],
-    ["Joined", new Date().toLocaleDateString("en-IN", { dateStyle: "long" })],
-  ])}
+      ["Account Role", roleLabel],
+      ["Email", email],
+      ["Status", "✅ Active"],
+      ["Joined", new Date().toLocaleDateString("en-IN", { dateStyle: "long" })],
+    ])}
 
     <p style="color:${BRAND.slateText};font-size:14px;line-height:1.7;">
       You can now access your personalised dashboard to manage health records, appointments, prescriptions, and more. <em>InshAllah.</em>
@@ -326,15 +523,15 @@ export const sendAppointmentBookedEmail = async (appointment) => {
     </p>
 
     ${infoBox([
-    ["Appointment ID", aptId],
-    ["Doctor", `Dr. ${doctorId.firstName} ${doctorId.lastName}`],
-    ["Specialization", doctorId.specialization || "General Practice"],
-    ["Date", appointmentDate],
-    ["Time Slot", timeSlot],
-    ["Reason", reason || "General Consultation"],
-    ["Fee", `₹${consultationFee || "N/A"}`],
-    ["Status", "⏳ Pending Confirmation"],
-  ])}
+      ["Appointment ID", aptId],
+      ["Doctor", `Dr. ${doctorId.firstName} ${doctorId.lastName}`],
+      ["Specialization", doctorId.specialization || "General Practice"],
+      ["Date", appointmentDate],
+      ["Time Slot", timeSlot],
+      ["Reason", reason || "General Consultation"],
+      ["Fee", `₹${consultationFee || "N/A"}`],
+      ["Status", "⏳ Pending Confirmation"],
+    ])}
 
     ${alertBox("⚠️ Please arrive <strong>10 minutes early</strong> and bring any previous medical records or reports.", "warning")}
 
@@ -351,14 +548,14 @@ export const sendAppointmentBookedEmail = async (appointment) => {
     </p>
 
     ${infoBox([
-    ["Appointment ID", aptId],
-    ["Patient", `${patientId.firstName} ${patientId.lastName}`],
-    ["Patient Email", patientId.email],
-    ["Date", appointmentDate],
-    ["Time Slot", timeSlot],
-    ["Reason", reason || "General Consultation"],
-    ["Status", "⏳ Awaiting Your Confirmation"],
-  ])}
+      ["Appointment ID", aptId],
+      ["Patient", `${patientId.firstName} ${patientId.lastName}`],
+      ["Patient Email", patientId.email],
+      ["Date", appointmentDate],
+      ["Time Slot", timeSlot],
+      ["Reason", reason || "General Consultation"],
+      ["Status", "⏳ Awaiting Your Confirmation"],
+    ])}
 
     ${ctaButton("View & Confirm Schedule →", `${BRAND.portalUrl}/doctor/appointments`, "#7c3aed")}
   `);
@@ -393,12 +590,12 @@ export const sendAppointmentConfirmedEmail = async (appointment) => {
     </p>
 
     ${infoBox([
-    ["Appointment ID", aptId],
-    ["Doctor", `Dr. ${doctorId.firstName} ${doctorId.lastName}`],
-    ["Date", appointmentDate],
-    ["Time Slot", timeSlot],
-    ["Status", `<span style="color:${BRAND.green};font-weight:700;">✅ Confirmed</span>`],
-  ])}
+      ["Appointment ID", aptId],
+      ["Doctor", `Dr. ${doctorId.firstName} ${doctorId.lastName}`],
+      ["Date", appointmentDate],
+      ["Time Slot", timeSlot],
+      ["Status", `<span style="color:${BRAND.green};font-weight:700;">✅ Confirmed</span>`],
+    ])}
 
     ${alertBox("📌 Bring a valid ID and any previous prescriptions or test reports to your appointment.", "success")}
 
@@ -431,12 +628,12 @@ export const sendAppointmentCancelledEmail = async (appointment, cancelledBy = "
     </p>
 
     ${infoBox([
-    ["Appointment ID", aptId],
-    ["Date", appointmentDate],
-    ["Time Slot", timeSlot],
-    ["Cancelled By", cancelledBy],
-    ["Reason", cancellationReason || "No reason provided"],
-  ])}
+      ["Appointment ID", aptId],
+      ["Date", appointmentDate],
+      ["Time Slot", timeSlot],
+      ["Cancelled By", cancelledBy],
+      ["Reason", cancellationReason || "No reason provided"],
+    ])}
 
     ${alertBox("If you believe this was a mistake, please contact the hospital or book a new appointment through the portal.", "danger")}
 
@@ -466,11 +663,11 @@ export const sendPrescriptionEmail = async (prescription) => {
     </p>
 
     ${infoBox([
-    ["Prescription ID", rxId],
-    ["Doctor", `Dr. ${doctorId.firstName} ${doctorId.lastName}`],
-    ["Diagnosis", diagnosis || "See medications below"],
-    ["Issued On", new Date(createdDate || Date.now()).toLocaleDateString("en-IN", { dateStyle: "long" })],
-  ])}
+      ["Prescription ID", rxId],
+      ["Doctor", `Dr. ${doctorId.firstName} ${doctorId.lastName}`],
+      ["Diagnosis", diagnosis || "See medications below"],
+      ["Issued On", new Date(createdDate || Date.now()).toLocaleDateString("en-IN", { dateStyle: "long" })],
+    ])}
 
     ${sectionHead("Prescribed Medications", "💊")}
 
@@ -504,13 +701,36 @@ export const sendPrescriptionEmail = async (prescription) => {
     ` : ""}
 
     <p style="color:${BRAND.mutedText};font-size:13px;margin-top:24px;">
-      A signed PDF copy is available in your patient portal.
+      Your prescription PDF is attached to this email. You can also view and download it from your patient portal.
     </p>
 
     ${ctaButton("View & Download Prescription →", `${BRAND.portalUrl}/patient/prescriptions`, BRAND.green)}
   `);
 
-  return sendEmail({ to: patientId.email, subject: `Digital Prescription: ${rxId}`, html, type: "prescription", userId: patientId._id, relatedEntityId: _id });
+  // Generate the branded PDF and attach it
+  let attachments = [];
+  try {
+    const pdfBuffer = await generatePrescriptionPDF(prescription);
+    attachments = [{
+      filename: `Prescription-${rxId}.pdf`,
+      content:  pdfBuffer,
+      contentType: "application/pdf",
+    }];
+    console.log(`📄 Prescription PDF generated (${(pdfBuffer.length / 1024).toFixed(1)} KB) — ${rxId}`);
+  } catch (pdfErr) {
+    console.error(`⚠️  PDF generation failed for ${rxId}: ${pdfErr.message}`);
+    // Email still sends without attachment if PDF generation fails
+  }
+
+  return sendEmail({
+    to: patientId.email,
+    subject: `Digital Prescription: ${rxId}`,
+    html,
+    type: "prescription",
+    userId: patientId._id,
+    relatedEntityId: _id,
+    attachments,
+  });
 };
 
 // ─────────────────────────────────────────────
@@ -535,12 +755,12 @@ export const sendLoginAlertEmail = async (user, deviceInfo, ipAddress) => {
     </p>
 
     ${infoBox([
-    ["Time", new Date().toLocaleString("en-IN")],
-    ["IP Address", ipAddress || "Unknown"],
-    ["Device", deviceInfo?.device || "Unknown"],
-    ["Browser", deviceInfo?.browser || "Unknown"],
-    ["OS", deviceInfo?.os || "Unknown"],
-  ])}
+      ["Time", new Date().toLocaleString("en-IN")],
+      ["IP Address", ipAddress || "Unknown"],
+      ["Device", deviceInfo?.device || "Unknown"],
+      ["Browser", deviceInfo?.browser || "Unknown"],
+      ["OS", deviceInfo?.os || "Unknown"],
+    ])}
 
     ${alertBox("⚠️ If you did <strong>NOT</strong> perform this login, please contact support immediately and change your password.", "warning")}
 
@@ -905,9 +1125,6 @@ export const sendIslamicNewYearEmail = async (user, { senderName = "SDI Health C
 // ─────────────────────────────────────────────
 // Exports
 // ─────────────────────────────────────────────
-// Trigger initial verification on startup (so success/error appears in console)
-getTransporter();
-
 export default {
   sendWelcomeEmail,
   sendAppointmentBookedEmail,
