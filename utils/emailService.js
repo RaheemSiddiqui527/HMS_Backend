@@ -1,11 +1,11 @@
 /**
  * Email Service — SDI Health Care
  * Professional HTML email templates with SDI brand identity.
- * Uses Resend API (HTTP) — works on Render, Vercel, Railway, etc.
+ * Uses nodemailer-style API — powered by Resend HTTP (works on Render).
  * Every send is logged to the EmailLog collection.
  */
 
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import PDFDocument from "pdfkit";
 import dotenv from "dotenv";
 import EmailLog from "../models/EmailLog.js";
@@ -13,10 +13,76 @@ import EmailLog from "../models/EmailLog.js";
 dotenv.config();
 
 // ─────────────────────────────────────────────
-// Resend Client
+// Transporter
+// Nodemailer interface — Resend HTTP transport inside.
+// Render blocks SMTP ports (465/587), so we use Resend's
+// REST API under the hood while keeping nodemailer syntax.
 // ─────────────────────────────────────────────
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM   = process.env.SMTP_FROM || "SDI Health Care <onboarding@resend.dev>";
+const RESEND_API_KEY      = process.env.RESEND_API_KEY || "";
+const FROM                = process.env.SMTP_FROM || "SDI Health Care <onboarding@resend.dev>";
+const RESEND_VERIFIED     = process.env.RESEND_VERIFIED_EMAIL || "";
+const DOMAIN_VERIFIED     = process.env.RESEND_DOMAIN_VERIFIED === "true";
+
+// Custom nodemailer transport that calls Resend REST API
+const resendTransport = nodemailer.createTransport({
+  streamTransport: true,   // keeps nodemailer happy (doesn't open TCP)
+  newline: "unix",
+  buffer: true,
+});
+
+// Override sendMail with our own HTTP implementation
+const transporter = {
+  /**
+   * Drop-in replacement for nodemailer's transporter.sendMail()
+   * Returns { messageId } on success — same shape as nodemailer.
+   */
+  async sendMail({ from, to, subject, html, attachments = [] }) {
+    const payload = { from, to, subject, html };
+
+    if (attachments.length > 0) {
+      payload.attachments = attachments.map((a) => ({
+        filename:    a.filename,
+        // Resend accepts Buffer directly as content
+        content:     Buffer.isBuffer(a.content)
+                       ? a.content.toString("base64")
+                       : a.content,
+        contentType: a.contentType || "application/octet-stream",
+      }));
+    }
+
+    const res = await fetch("https://api.resend.com/emails", {
+      method:  "POST",
+      headers: {
+        "Authorization": `Bearer ${RESEND_API_KEY}`,
+        "Content-Type":  "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      throw new Error(json?.message || json?.error || `Resend API error ${res.status}`);
+    }
+
+    return { messageId: json.id };
+  },
+
+  /** Verify just logs — no TCP connection needed */
+  verify(cb) {
+    if (!RESEND_API_KEY) {
+      console.warn("⚠️  RESEND_API_KEY is not set");
+      return cb && cb(new Error("RESEND_API_KEY missing"));
+    }
+    console.log(`✅ Email ready — Resend HTTP transport (${FROM})`);
+    return cb && cb(null, true);
+  },
+};
+
+// Startup check
+transporter.verify((err) => {
+  if (err) console.error("❌ Email transport error:", err.message);
+});
 
 // ─────────────────────────────────────────────
 // Brand Tokens
@@ -427,48 +493,35 @@ export const generatePrescriptionPDF = (prescription) => {
 // Core Send Function with Logging
 // ─────────────────────────────────────────────
 
-// Verified email for Resend testing (no domain)
-const RESEND_VERIFIED_EMAIL = process.env.RESEND_VERIFIED_EMAIL || process.env.SMTP_USER || "";
-// Set to true once you verify a domain at resend.com/domains
-const DOMAIN_VERIFIED = process.env.RESEND_DOMAIN_VERIFIED === "true";
-
 const sendEmail = async ({ to, subject, html, type, userId = null, relatedEntityId = null, attachments = [] }) => {
   const startTime = Date.now();
 
-  // ── Domain not verified: redirect to your own email in testing ──
-  let actualTo = to;
+  // Redirect to verified email if domain not verified yet
+  let actualTo   = to;
   let redirected = false;
 
-  if (!DOMAIN_VERIFIED && RESEND_VERIFIED_EMAIL) {
-    if (to.toLowerCase() !== RESEND_VERIFIED_EMAIL.toLowerCase()) {
-      console.warn(`⚠️  Email [${type}] redirected: ${to} → ${RESEND_VERIFIED_EMAIL} (domain not verified)`);
-      actualTo   = RESEND_VERIFIED_EMAIL;
+  if (!DOMAIN_VERIFIED && RESEND_VERIFIED) {
+    if (to.toLowerCase() !== RESEND_VERIFIED.toLowerCase()) {
+      console.warn(`⚠️  Email [${type}] redirected: ${to} → ${RESEND_VERIFIED} (domain not verified)`);
+      actualTo   = RESEND_VERIFIED;
       redirected = true;
-      // Prepend redirect notice to subject so you know who it was meant for
-      subject = `[TEST → ${to}] ${subject}`;
+      subject    = `[TEST → ${to}] ${subject}`;
     }
   }
 
-  // Build Resend payload
-  const payload = { from: FROM, to: actualTo, subject, html };
-
-  if (attachments.length > 0) {
-    payload.attachments = attachments.map((a) => ({
-      filename:    a.filename,
-      content:     a.content,
-      contentType: a.contentType || "application/octet-stream",
-    }));
-  }
-
   try {
-    const { data, error } = await resend.emails.send(payload);
-
-    if (error) throw new Error(error.message || JSON.stringify(error));
+    const info = await transporter.sendMail({
+      from:        FROM,
+      to:          actualTo,
+      subject,
+      html,
+      attachments,
+    });
 
     const durationMs = Date.now() - startTime;
-    await EmailLog.create({ to, subject, type, userId, relatedEntityId, status: "sent", messageId: data.id, durationMs });
-    console.log(`✉️  Email [${type}] → ${actualTo}${redirected ? ` (was: ${to})` : ""} (${durationMs}ms) id:${data.id}`);
-    return { success: true, messageId: data.id };
+    await EmailLog.create({ to, subject, type, userId, relatedEntityId, status: "sent", messageId: info.messageId, durationMs });
+    console.log(`✉️  Email [${type}] → ${actualTo}${redirected ? ` (was: ${to})` : ""} (${durationMs}ms) id:${info.messageId}`);
+    return { success: true, messageId: info.messageId };
 
   } catch (error) {
     const durationMs = Date.now() - startTime;
