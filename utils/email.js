@@ -4,26 +4,36 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+let transporter;
+
 /**
- * Configure Transporter
+ * Lazy initialization of transporter
+ * Enforces SSL (Port 465) and IPv4 for Render reliability.
  */
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT) || 465,
-  secure: parseInt(process.env.SMTP_PORT) === 465,
-  auth: {
-    user: process.env.SMTP_USER || "",
-    pass: process.env.SMTP_PASS || "",
-  },
-  tls: { rejectUnauthorized: false },
-  // Force IPv4 resolution explicitly via custom lookup
-  lookup: (hostname, options, callback) => {
-    dns.lookup(hostname, { ...options, family: 4 }, callback);
-  },
-  connectionTimeout: 20000,
-  greetingTimeout: 20000,
-  socketTimeout: 30000,
-});
+const getTransporter = () => {
+  if (!transporter) {
+    const port = parseInt(process.env.SMTP_PORT) || 465;
+    const isSecure = port === 465;
+
+    transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: port,
+      secure: isSecure,
+      auth: {
+        user: process.env.SMTP_USER || process.env.EMAIL_USER || "",
+        pass: process.env.SMTP_PASS || process.env.EMAIL_PASS || "",
+      },
+      tls: { rejectUnauthorized: false },
+      lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { ...options, family: 4 }, callback);
+      },
+      connectionTimeout: 20000,
+      greetingTimeout: 20000,
+      socketTimeout: 30000,
+    });
+  }
+  return transporter;
+};
 
 /**
  * Send Professional Prescription Email
@@ -96,7 +106,7 @@ export const sendPrescriptionEmail = async (prescription) => {
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
+    const info = await getTransporter().sendMail(mailOptions);
     console.log("Prescription Email Sent: %s", info.messageId);
     return true;
   } catch (error) {

@@ -14,33 +14,46 @@ dns.setDefaultResultOrder("ipv4first");
 
 dotenv.config();
 
-// ─────────────────────────────────────────────
-// Transporter
-// ─────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT) || 465,
-  secure: parseInt(process.env.SMTP_PORT) === 465, // true for 465, false for 587
-  auth: {
-    user: process.env.SMTP_USER || "",
-    pass: process.env.SMTP_PASS || "",
-  },
-  tls: { rejectUnauthorized: false },
-  // Explicitly force IPv4 DNS lookup — Render's free tier has no IPv6 outbound.
-  // nodemailer's `family` option is NOT forwarded to net.connect; this custom
-  // lookup is the only reliable way to pin resolution to IPv4.
-  lookup: (hostname, options, callback) => {
-    dns.lookup(hostname, { ...options, family: 4 }, callback);
-  },
-  connectionTimeout: 20000, // 20 s
-  greetingTimeout: 20000,
-  socketTimeout: 30000,
-});
+let transporter;
 
-transporter.verify((error) => {
-  if (error) console.error("❌ SMTP connection failed:", error.message);
-  else console.log(`✅ SMTP ready — ${process.env.SMTP_USER}`);
-});
+/**
+ * Lazy initialization of transporter
+ * Forces IPv4 and uses Port 465 (SSL) for maximum reliability on Render.
+ */
+const getTransporter = () => {
+  if (!transporter) {
+    const port = parseInt(process.env.SMTP_PORT) || 465;
+    const isSecure = port === 465;
+
+    transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: port,
+      secure: isSecure,
+      auth: {
+        user: process.env.SMTP_USER || process.env.EMAIL_USER || "",
+        pass: process.env.SMTP_PASS || process.env.EMAIL_PASS || "",
+      },
+      tls: { rejectUnauthorized: false },
+      // Explicitly force IPv4 DNS lookup — Render's free tier has no IPv6 outbound.
+      lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { ...options, family: 4 }, callback);
+      },
+      connectionTimeout: 20000,
+      greetingTimeout: 20000,
+      socketTimeout: 30000,
+    });
+
+    // Verify connection configuration
+    transporter.verify((error) => {
+      if (error) {
+        console.error("❌ Email Service Error:", error.message);
+      } else {
+        console.log(`✅ Email Service is ready — ${process.env.SMTP_USER || process.env.EMAIL_USER}`);
+      }
+    });
+  }
+  return transporter;
+};
 
 // ─────────────────────────────────────────────
 // Brand Tokens
@@ -242,7 +255,7 @@ const sendEmail = async ({ to, subject, html, type, userId = null, relatedEntity
   const from = process.env.SMTP_FROM || '"SDI Health Care" <noreply@sdihealth.com>';
 
   try {
-    const info = await transporter.sendMail({ from, to, subject, html });
+    const info = await getTransporter().sendMail({ from, to, subject, html });
     const durationMs = Date.now() - startTime;
 
     await EmailLog.create({ to, subject, type, userId, relatedEntityId, status: "sent", messageId: info.messageId, durationMs });
