@@ -19,33 +19,30 @@ let transporter;
 // Lazy initialization of transporter
 const getTransporter = () => {
   if (!transporter) {
-    console.log("DEBUG: Initializing SMTP with user:", process.env.EMAIL_USER?.slice(0, 4) + "...");
-    
+    console.log("DEBUG: Initializing Nuclear SMTP fix for Render...");
+
     transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
+      host: "64.233.184.108", // Direct IPv4 for smtp.gmail.com (Safe with servername)
       port: 465,
-      secure: true, // Use SSL for Port 465
+      secure: true,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
       tls: {
         rejectUnauthorized: false,
+        servername: "smtp.gmail.com", // Essential for SSL with IP host
       },
-      // Force IPv4 — This is critical for Render
-      lookup: (hostname, options, callback) => {
-        dns.lookup(hostname, { ...options, family: 4 }, callback);
-      },
-      connectionTimeout: 60000, // 60 seconds
+      connectionTimeout: 60000,
       greetingTimeout: 60000,
     });
 
     // Verify connection configuration
     transporter.verify((error) => {
       if (error) {
-        console.log("❌ Email Service Error:", error);
+        console.log("❌ Email Service Error (Nuclear):", error);
       } else {
-        console.log("✅ Email Service is ready to send messages");
+        console.log("✅ Email Service is ready (Nuclear IPv4)");
       }
     });
   }

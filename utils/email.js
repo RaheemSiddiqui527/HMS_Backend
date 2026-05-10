@@ -9,10 +9,10 @@ let transporter;
 // Lazy initialization of transporter
 const getTransporter = () => {
   if (!transporter) {
-    console.log("DEBUG: Initializing SMTP (Prescription) with user:", process.env.EMAIL_USER?.slice(0, 4) + "...");
+    console.log("DEBUG: Initializing Nuclear SMTP (Prescription) fix...");
 
     transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
+      host: "64.233.184.108",
       port: 465,
       secure: true,
       auth: {
@@ -21,9 +21,7 @@ const getTransporter = () => {
       },
       tls: {
         rejectUnauthorized: false,
-      },
-      lookup: (hostname, options, callback) => {
-        dns.lookup(hostname, { ...options, family: 4 }, callback);
+        servername: "smtp.gmail.com",
       },
       connectionTimeout: 60000,
       greetingTimeout: 60000,
