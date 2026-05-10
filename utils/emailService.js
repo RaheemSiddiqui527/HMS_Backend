@@ -5,33 +5,41 @@
  */
 
 import nodemailer from "nodemailer";
+import dns from "dns";
 import PDFDocument from "pdfkit";
 import dotenv from "dotenv";
 import EmailLog from "../models/EmailLog.js";
 
+// Force IPv4-first globally
+dns.setDefaultResultOrder("ipv4first");
+
 dotenv.config();
 
-// ─────────────────────────────────────────────
-// Transporter
-// ─────────────────────────────────────────────
-const SMTP_PORT = parseInt(process.env.SMTP_PORT) || 587;
+let transporter;
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: SMTP_PORT,
-  // Port 465 = SSL (secure:true) | Port 587 = STARTTLS (secure:false)
-  secure: SMTP_PORT === 465,
-  auth: {
-    user: process.env.SMTP_USER || "",
-    pass: process.env.SMTP_PASS || "",
-  },
-  tls: { rejectUnauthorized: false },
-});
+// Lazy initialization of transporter
+const getTransporter = () => {
+  if (!transporter) {
+    console.log("DEBUG: Initializing Nuclear SMTP fix for Render...");
 
-transporter.verify((error) => {
-  if (error) console.error("❌ SMTP connection failed:", error.message);
-  else console.log(`✅ SMTP ready — ${process.env.SMTP_USER}`);
-});
+    transporter = nodemailer.createTransport({
+      host: "64.233.184.108", // Direct IPv4 for smtp.gmail.com
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER || process.env.SMTP_USER,
+        pass: process.env.EMAIL_PASS || process.env.SMTP_PASS,
+      },
+      tls: {
+        rejectUnauthorized: false,
+        servername: "smtp.gmail.com",
+      },
+      connectionTimeout: 60000,
+      greetingTimeout: 60000,
+    });
+  }
+  return transporter;
+};
 
 // ─────────────────────────────────────────────
 // Brand Tokens
@@ -446,7 +454,7 @@ const sendEmail = async ({ to, subject, html, type, userId = null, relatedEntity
   const from = process.env.SMTP_FROM || '"SDI Health Care" <noreply@sdihealth.com>';
 
   try {
-    const info = await transporter.sendMail({ from, to, subject, html, attachments });
+    const info = await getTransporter().sendMail({ from, to, subject, html, attachments });
     const durationMs = Date.now() - startTime;
 
     await EmailLog.create({ to, subject, type, userId, relatedEntityId, status: "sent", messageId: info.messageId, durationMs });
