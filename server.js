@@ -10,6 +10,7 @@ import dotenv from "dotenv";
 
 import connectDB from "./config/db.js";
 import { errorHandler } from "./middlewares/errorHandler.middleware.js";
+import keepAlive, { activityTracker } from "./utils/keepAlive.js";
 
 // Import routes
 import authRoutes from "./routes/auth.route.js";
@@ -38,6 +39,9 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Activity tracker for keep-alive
+app.use(activityTracker);
 
 // Request logging middleware (optional)
 app.use((req, res, next) => {
@@ -87,4 +91,9 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`✓ Server running on port ${PORT}`);
   console.log(`✓ Environment: ${process.env.NODE_ENV || "development"}`);
+  
+  // Start keep-alive script
+  if (process.env.NODE_ENV === "production") {
+    keepAlive(process.env.BACKEND_URL);
+  }
 });
